@@ -35,8 +35,10 @@ invocation shape. If code or plan disagrees with this page, this page wins; chan
 | `POST /api/stories` | `{slug, universe, variant, title}` → creates folder + `session.<variant>.json` skeleton |
 | `GET /api/stories/{sid}` | detail incl. variants, recollections, artifact presence |
 | `GET/PUT /api/stories/{sid}/session/{variant}` | raw JSON body; unknown fields preserved server-side (`JsonNode` round-trip) |
-| `POST /api/stories/{sid}/recollections?person=x` | multipart upload; **audio files auto-enqueue a `transcribe` job**; recollections are immutable after capture (no PUT) |
+| `POST /api/stories/{sid}/recollections?person=x` | multipart upload; **audio files auto-enqueue a `transcribe` job**; recordings are immutable after capture |
 | `GET /api/stories/{sid}/recollections` / `…/{file}` | list / fetch (range-enabled for audio playback) |
+| `PUT /api/stories/{sid}/recollections/{file}` | **transcripts only** (`.txt`/`.md`): If-Match guarded. Recordings stay immutable. The no-cleaning rule binds the model, not the human — the UI gates this behind an explicit confirm |
+| `GET/DELETE /api/stories/{sid}/prev/{variant}/{sceneId}` | the `draft.<v>.<sceneId>.prev.md` one-level undo: GET returns its text (404 when absent), DELETE discards it |
 | `GET /api/stories/{sid}/draft/{variant}` | parsed scene DTOs `[{sceneId, title, beats, text, verifyFlags[]}]` — the client never parses draft.md |
 | `PUT /api/stories/{sid}/draft/{variant}/scenes/{sceneId}` | text body + If-Match on the draft file |
 | `GET /api/stories/{sid}/verify/{variant}` | parsed `verify.<variant>.md` |

@@ -11,4 +11,28 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!--
+    SPA wiring (React app in ../../app):
+    - Dev: do NOT copy anything into wwwroot. Run the Vite dev server ("npm run dev" in app/),
+      which proxies /api -> http://localhost:5211 (see app/vite.config.ts). Program.cs only maps
+      the SPA fallback when wwwroot/index.html actually exists, so an empty wwwroot is fine.
+    - Publish: the target below runs "npm run build" in app/ and ships app/dist/** as wwwroot/**
+      in the publish output; Program.cs serves it via UseStaticFiles + MapFallbackToFile.
+  -->
+  <PropertyGroup>
+    <SpaRoot>..\..\app\</SpaRoot>
+  </PropertyGroup>
+
+  <Target Name="BuildAndPublishSpa" BeforeTargets="ComputeFilesToPublish">
+    <Exec Command="npm run build" WorkingDirectory="$(SpaRoot)" />
+    <ItemGroup>
+      <SpaDistFiles Include="$(SpaRoot)dist\**" />
+      <ResolvedFileToPublish Include="@(SpaDistFiles)">
+        <RelativePath>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
 </Project>

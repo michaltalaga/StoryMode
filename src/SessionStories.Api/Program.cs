@@ -270,6 +270,49 @@ api.MapGet("/stories/{sid}/recollections/{file}", (string sid, string file, ISto
     return Results.File(path, ContentTypeForFile(file), enableRangeProcessing: true);
 });
 
+// Transcripts only — the no-cleaning rule binds the model, not the human. Recordings stay immutable.
+api.MapPut("/stories/{sid}/recollections/{file}", async (string sid, string file, HttpRequest request, HttpResponse response, IStoryStore stories) =>
+{
+    if (!IsSafeFileName(Path.GetFileNameWithoutExtension(file)))
+        return Problem(400, "Invalid file name");
+    if (Path.GetExtension(file).ToLowerInvariant() is not (".txt" or ".md"))
+        return Problem(403, "Only transcripts (.txt/.md) can be edited; recordings are immutable after capture");
+    var etag = ReadIfMatch(request);
+    if (etag is null)
+        return Problem(428, "If-Match header is required for PUT");
+    var text = await new StreamReader(request.Body).ReadToEndAsync();
+    try
+    {
+        stories.WriteFile(sid, $"recollections/{file}", text, etag);
+    }
+    catch (ETagMismatchException ex)
+    {
+        return ETagConflict(response, ex, "text/plain; charset=utf-8");
+    }
+    return Results.NoContent();
+});
+
+// The one-level undo left behind by scene regeneration (draft.<v>.<sceneId>.prev.md).
+api.MapGet("/stories/{sid}/prev/{variant}/{sceneId}", (string sid, string variant, string sceneId, IStoryStore stories) =>
+{
+    if (!IsSafeFileName(variant) || !IsSafeFileName(sceneId))
+        return Problem(400, "Invalid name");
+    var rel = $"draft.{variant}.{sceneId}.prev.md";
+    var prev = stories.ReadFile(sid, rel);
+    return prev is null ? Problem(404, $"{rel} not found") : Results.Text(prev.Text, "text/markdown; charset=utf-8");
+});
+
+api.MapDelete("/stories/{sid}/prev/{variant}/{sceneId}", (string sid, string variant, string sceneId, IStoryStore stories) =>
+{
+    if (!IsSafeFileName(variant) || !IsSafeFileName(sceneId))
+        return Problem(400, "Invalid name");
+    var path = Path.Combine(stories.StoriesRoot, sid, $"draft.{variant}.{sceneId}.prev.md");
+    if (!File.Exists(path))
+        return Problem(404, "Nothing to discard");
+    File.Delete(path);
+    return Results.NoContent();
+});
+
 // ---------------------------------------------------------------------------
 // Draft / verify / bible
 // ---------------------------------------------------------------------------
