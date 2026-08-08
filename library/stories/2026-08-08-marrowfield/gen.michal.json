@@ -1,0 +1,12 @@
+{
+  "draftSessionId": null,
+  "invocations": [
+    {
+      "stage": "verify",
+      "sessionId": "6ae06dc4-e3d0-47de-9de9-83e840b252a7",
+      "costUsd": 0,
+      "at": "2026-08-08T21:42:32.1594950\u002B00:00",
+      "success": false
+    }
+  ]
+}

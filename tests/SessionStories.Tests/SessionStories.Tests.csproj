@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SessionStories.Tts.Chatterbox\SessionStories.Tts.Chatterbox.csproj" />
+    <ProjectReference Include="..\..\src\SessionStories.Providers\SessionStories.Providers.csproj" />
   </ItemGroup>
 
 </Project>

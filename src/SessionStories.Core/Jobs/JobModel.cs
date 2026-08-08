@@ -1,0 +1,48 @@
+namespace SessionStories.Core.Jobs;
+
+public enum JobType { Transcribe, Generate, RegenScene, Verify, RenderTts }
+
+public enum JobState { Queued, Running, Succeeded, Failed, Cancelled }
+
+/// <summary>
+/// In-memory job record. Jobs are not persisted — the durable trace is gen.&lt;variant&gt;.json
+/// and the artifacts on disk; a restart loses only this bookkeeping.
+/// </summary>
+public sealed class JobRecord
+{
+    private readonly Queue<string> _log = new();
+    private readonly Lock _gate = new();
+
+    public required string Id { get; init; }
+    public required JobType Type { get; init; }
+    public required string StoryId { get; init; }
+    public required string Variant { get; init; }
+    public string? SceneId { get; init; }
+    public string? FeedbackNote { get; init; }
+    public string? File { get; init; }
+
+    public JobState State { get; set; } = JobState.Queued;
+    public string Stage { get; set; } = "";
+    public DateTimeOffset CreatedUtc { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? StartedUtc { get; set; }
+    public DateTimeOffset? FinishedUtc { get; set; }
+    public decimal? CostUsd { get; set; }
+    public string? Error { get; set; }
+
+    public const int LogTailCapacity = 100;
+
+    public void AppendLog(string line)
+    {
+        lock (_gate)
+        {
+            _log.Enqueue(line);
+            while (_log.Count > LogTailCapacity)
+                _log.Dequeue();
+        }
+    }
+
+    public IReadOnlyList<string> LogTail
+    {
+        get { lock (_gate) return [.. _log]; }
+    }
+}
