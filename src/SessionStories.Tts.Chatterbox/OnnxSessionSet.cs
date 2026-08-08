@@ -19,8 +19,11 @@ public sealed class OnnxSessionSet : IDisposable
     public InferenceSession LanguageModel { get; } = null!;
     public InferenceSession ConditionalDecoder { get; } = null!;
 
-    /// <summary>True when the LM expects Float16 for inputs_embeds and past_key_values.</summary>
-    public bool LmUsesFloat16 { get; }
+    // The fp16 export has a MIXED interface: inputs_embeds and logits stay fp32 while the
+    // KV-cache tensors are fp16 — so each tensor class carries its own flag.
+    public bool LmEmbedsUseFloat16 { get; }
+    public bool LmKvUsesFloat16 { get; }
+    public bool LmLogitsUseFloat16 { get; }
 
     /// <summary>The LM's past_key_values.* input names in model declaration order.</summary>
     public IReadOnlyList<string> LmPastInputNames { get; }
@@ -50,7 +53,9 @@ public sealed class OnnxSessionSet : IDisposable
             var lmInputs = LanguageModel.InputMetadata;
             if (!lmInputs.TryGetValue("inputs_embeds", out var embedsMeta))
                 throw new InvalidOperationException("Language model has no 'inputs_embeds' input; wrong model file?");
-            LmUsesFloat16 = embedsMeta.ElementType == typeof(Float16);
+            // ElementDataType is the version-stable way to detect fp16; the managed Type
+            // mapping for float16 has changed across OnnxRuntime releases.
+            LmEmbedsUseFloat16 = embedsMeta.ElementDataType == TensorElementType.Float16;
             LmPastInputNames = lmInputs.Keys
                 .Where(k => k.StartsWith("past_key_values.", StringComparison.Ordinal))
                 .ToArray();
@@ -59,6 +64,9 @@ public sealed class OnnxSessionSet : IDisposable
                 throw new InvalidOperationException(
                     $"Language model declares {LmPastInputNames.Count} past_key_values inputs, expected {LmLayerCount * 2}.");
             }
+            LmKvUsesFloat16 = lmInputs[LmPastInputNames[0]].ElementDataType == TensorElementType.Float16;
+            LmLogitsUseFloat16 = LanguageModel.OutputMetadata.TryGetValue("logits", out var logitsMeta)
+                && logitsMeta.ElementDataType == TensorElementType.Float16;
         }
         catch
         {
@@ -89,7 +97,7 @@ public sealed class OnnxSessionSet : IDisposable
     /// <summary>Wraps float data as an LM input tensor, converting to Float16 when the model requires it.</summary>
     public NamedOnnxValue CreateLmFloatInput(string name, float[] data, int[] dims)
     {
-        if (!LmUsesFloat16)
+        if (!LmEmbedsUseFloat16)
             return NamedOnnxValue.CreateFromTensor(name, new DenseTensor<float>(data, dims));
 
         var half = new Float16[data.Length];
@@ -102,7 +110,7 @@ public sealed class OnnxSessionSet : IDisposable
     public NamedOnnxValue CreateLmEmptyPast(string name)
     {
         int[] dims = [1, KvHeadCount, 0, HeadDim];
-        return LmUsesFloat16
+        return LmKvUsesFloat16
             ? NamedOnnxValue.CreateFromTensor(name, new DenseTensor<Float16>(dims))
             : NamedOnnxValue.CreateFromTensor(name, new DenseTensor<float>(dims));
     }
@@ -112,14 +120,14 @@ public sealed class OnnxSessionSet : IDisposable
     /// The wrapped value stays valid only until the run result it came from is disposed.
     /// </summary>
     public NamedOnnxValue PresentAsPast(string pastName, NamedOnnxValue present)
-        => LmUsesFloat16
+        => LmKvUsesFloat16
             ? NamedOnnxValue.CreateFromTensor(pastName, present.AsTensor<Float16>())
             : NamedOnnxValue.CreateFromTensor(pastName, present.AsTensor<float>());
 
     /// <summary>Copies an LM output (Float16 or float) into a float[] plus its dimensions.</summary>
     public float[] ExtractLmFloats(NamedOnnxValue value, out int[] dims)
     {
-        if (!LmUsesFloat16)
+        if (!LmLogitsUseFloat16)
             return ExtractFloats(value, out dims);
 
         var tensor = value.AsTensor<Float16>();

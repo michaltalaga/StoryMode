@@ -180,6 +180,12 @@ def main() -> None:
     repetition_penalty = 1.2
     repetition_penalty_processor = RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty)
 
+    # The fp16 export has a mixed interface: inputs_embeds/logits are fp32 while the
+    # KV-cache tensors are fp16. Probe each input class separately.
+    lm_input_types = {i.name: i.type for i in llama_with_past_session.get_inputs()}
+    embeds_dtype = np.float16 if lm_input_types.get("inputs_embeds") == "tensor(float16)" else np.float32
+    kv_dtype = np.float16 if lm_input_types.get("past_key_values.0.key") == "tensor(float16)" else np.float32
+
     num_hidden_layers = 30
     num_key_value_heads = 16
     head_dim = 64
@@ -202,18 +208,18 @@ def main() -> None:
             ## Prepare llm inputs
             batch_size, seq_len, _ = inputs_embeds.shape
             past_key_values = {
-                f"past_key_values.{layer}.{kv}": np.zeros([batch_size, num_key_value_heads, 0, head_dim], dtype=np.float32)
+                f"past_key_values.{layer}.{kv}": np.zeros([batch_size, num_key_value_heads, 0, head_dim], dtype=kv_dtype)
                 for layer in range(num_hidden_layers)
                 for kv in ("key", "value")
             }
             attention_mask = np.ones((batch_size, seq_len), dtype=np.int64)
         logits, *present_key_values = llama_with_past_session.run(None, dict(
-            inputs_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds.astype(embeds_dtype),
             attention_mask=attention_mask,
             **past_key_values,
         ))
 
-        logits = logits[:, -1, :]
+        logits = logits[:, -1, :].astype(np.float32)
         next_token_logits = repetition_penalty_processor(generate_tokens, logits)
 
         next_token = np.argmax(next_token_logits, axis=-1, keepdims=True).astype(np.int64)

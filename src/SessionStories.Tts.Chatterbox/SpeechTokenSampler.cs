@@ -114,6 +114,9 @@ public sealed class SpeechTokenSampler
         if (_repetitionPenalty == 1.0)
             return;
 
+        // Single-precision on purpose: numpy (NEP 50) computes this as float32 op float32,
+        // and double-then-round diverges from it by 1 ulp on near-ties.
+        float penalty = (float)_repetitionPenalty;
         var seen = new HashSet<long>();
         foreach (var id in generatedIds)
         {
@@ -123,9 +126,7 @@ public sealed class SpeechTokenSampler
             if (index < 0 || index >= logits.Length)
                 continue;
             float score = logits[index];
-            logits[index] = score < 0
-                ? (float)(score * _repetitionPenalty)
-                : (float)(score / _repetitionPenalty);
+            logits[index] = score < 0 ? score * penalty : score / penalty;
         }
     }
 
