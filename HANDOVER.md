@@ -276,3 +276,24 @@ available. ONNX Runtime already working locally.
 
 If a Games Workshop universe is ever used: GW's IP policy permits non-commercial
 fan work only. Fine privately; monetization is not.
+
+## Addendum — corrections discovered during the build (2026-08-09)
+
+Everything above is the original handover. The build (see `docs/api.md`, the living
+contract) invalidated a few details:
+
+- **Exaggeration is a runtime input** in the Chatterbox ONNX export (`embed_tokens`
+  takes it per call), not baked at prepare time. One conditionals cache per voice
+  serves all exaggeration settings — the "separate saved file per setting" note above
+  is obsolete.
+- **TTS runs fully in .NET** (C# port of `onnx-community/chatterbox-multilingual-ONNX`
+  on ONNX Runtime CUDA, token-parity-proven against the Python reference —
+  `docs/reference/parity-results.md`). No Python in the pipeline; whisper runs via
+  Whisper.net.
+- **Variant files are always `session.<variant>.json`** — the bare `session.json` in
+  the folder sketch above is invalid; the variant name comes from the filename.
+- **`claude` 2.1.170 has no `--max-turns`** — runaway protection is `--max-budget-usd`
+  plus per-job process timeouts. `--verbose` is required with `stream-json`. Never
+  `--bare` (it switches billing off the subscription login).
+- **CUDA 13 runtime is staged repo-locally** in `models/cuda` (no system install);
+  the code prepends it to the process PATH automatically.
