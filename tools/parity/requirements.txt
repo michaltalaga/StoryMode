@@ -1,0 +1,6 @@
+# Parity reference dependencies (no torch needed; AutoTokenizer runs tokenizers-only).
+onnxruntime
+transformers
+numpy
+librosa
+soundfile
