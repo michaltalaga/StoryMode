@@ -1,0 +1,23 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+publish/
+
+# Node / SPA
+node_modules/
+app/dist/
+
+# ML models & runtime caches (downloaded via scripts/download-models.ps1)
+models/
+
+# Library data: text artifacts are committed, audio/binary artifacts are not
+library/**/audio/
+library/**/*.mp3
+library/**/*.wav
+library/**/*.m4a
+library/voice-cache/
+
+# misc
+*.log

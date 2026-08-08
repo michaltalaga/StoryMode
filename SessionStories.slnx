@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SessionStories.Api/SessionStories.Api.csproj" />
+    <Project Path="src/SessionStories.Core/SessionStories.Core.csproj" />
+    <Project Path="src/SessionStories.Providers/SessionStories.Providers.csproj" />
+    <Project Path="src/SessionStories.Tts.Chatterbox/SessionStories.Tts.Chatterbox.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/tts-cli/tts-cli.csproj" />
+  </Folder>
+</Solution>
