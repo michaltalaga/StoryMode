@@ -4,9 +4,10 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 namespace SessionStories.Tts.Chatterbox;
 
 /// <summary>
-/// Owns the four ONNX inference sessions of the Chatterbox pipeline and hides the
-/// fp16-vs-fp32 storage type of the language model: all values crossing this boundary
-/// are float[] regardless of the on-disk model precision.
+/// Owns the four ONNX inference sessions of the Chatterbox pipeline. For the language model it
+/// additionally exposes the OrtValue plumbing the autoregressive loop needs to keep the KV cache
+/// resident on the execution device (CUDA when available, CPU otherwise) instead of round-tripping
+/// it through managed tensors on every step.
 /// </summary>
 public sealed class OnnxSessionSet : IDisposable
 {
@@ -24,6 +25,18 @@ public sealed class OnnxSessionSet : IDisposable
     public bool LmEmbedsUseFloat16 { get; }
     public bool LmKvUsesFloat16 { get; }
     public bool LmLogitsUseFloat16 { get; }
+
+    /// <summary>Whether the language model actually runs on the CUDA execution provider.</summary>
+    public bool LmUsesCuda { get; }
+
+    /// <summary>
+    /// Memory location for LM KV-cache outputs: CUDA device memory when the LM runs on CUDA,
+    /// CPU otherwise. Binding present.* outputs here keeps the cache off the PCIe bus.
+    /// </summary>
+    public OrtMemoryInfo LmKvMemoryInfo { get; }
+
+    // Dispose only the mem-info we created; OrtMemoryInfo.DefaultInstance is a process singleton.
+    private readonly OrtMemoryInfo? _ownedKvMemoryInfo;
 
     /// <summary>The LM's past_key_values.* input names in model declaration order.</summary>
     public IReadOnlyList<string> LmPastInputNames { get; }
@@ -44,11 +57,15 @@ public sealed class OnnxSessionSet : IDisposable
 
         try
         {
+            if (!options.ForceCpu)
+                PrependCudaDllDirToPath(options);
+
             // Speech encoder runs once per voice; CPU is deliberate and sufficient.
             SpeechEncoder = new InferenceSession(Path.Combine(modelDir, "speech_encoder.onnx"));
-            EmbedTokens = CreateAccelerated(Path.Combine(modelDir, "embed_tokens.onnx"), options.ForceCpu, logWarning);
-            LanguageModel = CreateAccelerated(Path.Combine(modelDir, options.LanguageModelFile), options.ForceCpu, logWarning);
-            ConditionalDecoder = CreateAccelerated(Path.Combine(modelDir, "conditional_decoder.onnx"), options.ForceCpu, logWarning);
+            EmbedTokens = CreateAccelerated(Path.Combine(modelDir, "embed_tokens.onnx"), options.ForceCpu, logWarning, out _);
+            LanguageModel = CreateAccelerated(Path.Combine(modelDir, options.LanguageModelFile), options.ForceCpu, logWarning, out var lmUsesCuda);
+            LmUsesCuda = lmUsesCuda;
+            ConditionalDecoder = CreateAccelerated(Path.Combine(modelDir, "conditional_decoder.onnx"), options.ForceCpu, logWarning, out _);
 
             var lmInputs = LanguageModel.InputMetadata;
             if (!lmInputs.TryGetValue("inputs_embeds", out var embedsMeta))
@@ -67,6 +84,17 @@ public sealed class OnnxSessionSet : IDisposable
             LmKvUsesFloat16 = lmInputs[LmPastInputNames[0]].ElementDataType == TensorElementType.Float16;
             LmLogitsUseFloat16 = LanguageModel.OutputMetadata.TryGetValue("logits", out var logitsMeta)
                 && logitsMeta.ElementDataType == TensorElementType.Float16;
+
+            if (LmUsesCuda)
+            {
+                _ownedKvMemoryInfo = new OrtMemoryInfo(
+                    OrtMemoryInfo.allocatorCUDA, OrtAllocatorType.DeviceAllocator, deviceId: 0, OrtMemType.Default);
+                LmKvMemoryInfo = _ownedKvMemoryInfo;
+            }
+            else
+            {
+                LmKvMemoryInfo = OrtMemoryInfo.DefaultInstance;
+            }
         }
         catch
         {
@@ -75,7 +103,32 @@ public sealed class OnnxSessionSet : IDisposable
         }
     }
 
-    private static InferenceSession CreateAccelerated(string modelPath, bool forceCpu, Action<string> logWarning)
+    /// <summary>
+    /// Makes the CUDA/cuDNN runtime DLLs discoverable without requiring callers to prepare PATH.
+    /// Uses <see cref="ChatterboxOptions.CudaDllDir"/> when set, otherwise the "cuda" directory
+    /// next to the model directory (e.g. &lt;repo&gt;\models\cuda for &lt;repo&gt;\models\chatterbox).
+    /// </summary>
+    private static void PrependCudaDllDirToPath(ChatterboxOptions options)
+    {
+        var dir = options.CudaDllDir;
+        if (string.IsNullOrEmpty(dir))
+        {
+            var modelsParent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.ModelDir)));
+            if (modelsParent is null)
+                return;
+            dir = Path.Combine(modelsParent, "cuda");
+        }
+        if (!Directory.Exists(dir))
+            return;
+
+        var full = Path.GetFullPath(dir);
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        if (path.Split(Path.PathSeparator).Contains(full, StringComparer.OrdinalIgnoreCase))
+            return;
+        Environment.SetEnvironmentVariable("PATH", full + Path.PathSeparator + path);
+    }
+
+    private static InferenceSession CreateAccelerated(string modelPath, bool forceCpu, Action<string> logWarning, out bool usedCuda)
     {
         if (!forceCpu)
         {
@@ -83,7 +136,9 @@ public sealed class OnnxSessionSet : IDisposable
             {
                 using var sessionOptions = new SessionOptions();
                 sessionOptions.AppendExecutionProvider_CUDA();
-                return new InferenceSession(modelPath, sessionOptions);
+                var session = new InferenceSession(modelPath, sessionOptions);
+                usedCuda = true;
+                return session;
             }
             catch (Exception ex)
             {
@@ -91,53 +146,50 @@ public sealed class OnnxSessionSet : IDisposable
             }
         }
 
+        usedCuda = false;
         return new InferenceSession(modelPath);
     }
 
-    /// <summary>Wraps float data as an LM input tensor, converting to Float16 when the model requires it.</summary>
-    public NamedOnnxValue CreateLmFloatInput(string name, float[] data, int[] dims)
+    /// <summary>
+    /// Wraps float data as the LM inputs_embeds value, converting to Float16 when the model requires it.
+    /// The returned OrtValue pins the backing array: keep it alive until the run that consumed it completes.
+    /// </summary>
+    public OrtValue CreateLmEmbedsValue(float[] data, long[] shape)
     {
         if (!LmEmbedsUseFloat16)
-            return NamedOnnxValue.CreateFromTensor(name, new DenseTensor<float>(data, dims));
+            return OrtValue.CreateTensorValueFromMemory(data, shape);
 
         var half = new Float16[data.Length];
         for (int i = 0; i < data.Length; i++)
             half[i] = (Float16)data[i];
-        return NamedOnnxValue.CreateFromTensor(name, new DenseTensor<Float16>(half, dims));
+        return OrtValue.CreateTensorValueFromMemory(half, shape);
     }
 
-    /// <summary>An empty [1, 16, 0, 64] KV tensor for the prefill step.</summary>
-    public NamedOnnxValue CreateLmEmptyPast(string name)
+    /// <summary>An empty [1, 16, 0, 64] KV value for the prefill step (zero bytes, so CPU placement is fine).</summary>
+    public OrtValue CreateLmEmptyPastValue()
+        => OrtValue.CreateAllocatedTensorValue(
+            OrtAllocator.DefaultInstance,
+            LmKvUsesFloat16 ? TensorElementType.Float16 : TensorElementType.Float,
+            [1, KvHeadCount, 0, HeadDim]);
+
+    /// <summary>Copies the last vocab row of a CPU-resident LM logits value (fp32 or fp16) into a float[].</summary>
+    public float[] ExtractLastLogits(OrtValue logits)
     {
-        int[] dims = [1, KvHeadCount, 0, HeadDim];
-        return LmKvUsesFloat16
-            ? NamedOnnxValue.CreateFromTensor(name, new DenseTensor<Float16>(dims))
-            : NamedOnnxValue.CreateFromTensor(name, new DenseTensor<float>(dims));
-    }
-
-    /// <summary>
-    /// Re-labels a present KV output as the matching past input without copying or converting.
-    /// The wrapped value stays valid only until the run result it came from is disposed.
-    /// </summary>
-    public NamedOnnxValue PresentAsPast(string pastName, NamedOnnxValue present)
-        => LmKvUsesFloat16
-            ? NamedOnnxValue.CreateFromTensor(pastName, present.AsTensor<Float16>())
-            : NamedOnnxValue.CreateFromTensor(pastName, present.AsTensor<float>());
-
-    /// <summary>Copies an LM output (Float16 or float) into a float[] plus its dimensions.</summary>
-    public float[] ExtractLmFloats(NamedOnnxValue value, out int[] dims)
-    {
-        if (!LmLogitsUseFloat16)
-            return ExtractFloats(value, out dims);
-
-        var tensor = value.AsTensor<Float16>();
-        dims = tensor.Dimensions.ToArray();
-        var dense = tensor as DenseTensor<Float16> ?? tensor.ToDenseTensor();
-        var span = dense.Buffer.Span;
-        var result = new float[span.Length];
-        for (int i = 0; i < span.Length; i++)
-            result[i] = (float)span[i];
-        return result;
+        var shape = logits.GetTensorTypeAndShape().Shape;
+        int vocab = checked((int)shape[^1]);
+        var row = new float[vocab];
+        if (LmLogitsUseFloat16)
+        {
+            var span = logits.GetTensorDataAsSpan<Float16>();
+            var src = span[^vocab..];
+            for (int i = 0; i < vocab; i++)
+                row[i] = (float)src[i];
+        }
+        else
+        {
+            logits.GetTensorDataAsSpan<float>()[^vocab..].CopyTo(row);
+        }
+        return row;
     }
 
     public static float[] ExtractFloats(NamedOnnxValue value, out int[] dims)
@@ -162,5 +214,6 @@ public sealed class OnnxSessionSet : IDisposable
         EmbedTokens?.Dispose();
         LanguageModel?.Dispose();
         ConditionalDecoder?.Dispose();
+        _ownedKvMemoryInfo?.Dispose();
     }
 }
