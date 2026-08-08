@@ -1,0 +1,20 @@
+{
+  "voices": {
+    "narrator-en-dry": {
+      "provider": "chatterbox-onnx",
+      "languages": ["en"],
+      "referenceWav": "voices/narrator-en-dry.wav",
+      "exaggeration": 0.65,
+      "cfg": 0.3
+    },
+    "narrator-pl-dom": {
+      "provider": "chatterbox-onnx",
+      "languages": ["pl"],
+      "referenceWav": "voices/narrator-pl-dom.wav",
+      "exaggeration": 0.6,
+      "cfg": 0.3
+    }
+  },
+  "default": "narrator-en-dry",
+  "_notes": "referenceWav paths are relative to this universe folder; wavs are gitignored. English references: Kyutai CC0 set (*_enhanced.wav, check per-voice licensing — EARS-derived voices are CC BY-NC). Polish references: record your own (~10s, quiet room). Wavs only, never community .pt files."
+}

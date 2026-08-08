@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "inputType": "rpg",
+  "universe": "generic-fantasy",
+  "language": "en",
+  "title": "The Gem of Marrowfield",
+  "pov": "corin",
+  "tone": "",
+  "targetMinutes": 12,
+  "voice": "narrator-en-dry",
+  "voiceOverrides": {},
+  "sources": {
+    "primary": ["michal.txt"],
+    "background": []
+  },
+  "cast": [
+    { "ref": "corin" },
+    { "ref": "vesh" },
+    { "name": "The elder of Marrowfield", "about": "stingy, keeps his own door half-closed while asking for favours" }
+  ],
+  "stakes": "Recover the stolen gem from the caves above the treeline before the village loses its protection.",
+  "beats": [
+    { "id": "b1", "flag": "given",  "text": "The elder tasks the party with recovering the gem; offers gratitude, not payment." },
+    { "id": "b2", "flag": "given",  "text": "First two traps in the caves found and survived; the third catches Corin — the wall gives way and he falls." },
+    { "id": "b3", "flag": "invent", "text": "How Corin gets out of the lower grotto." },
+    { "id": "b4", "flag": "given",  "text": "Goblin fight at the underground lake — Corin distracts the chief; the party wins." },
+    { "id": "b5", "flag": "given",  "text": "The gem is recovered and returned. The elder is grateful. Only grateful." }
+  ],
+  "outcome": "Gem recovered; Corin no longer trusts walls.",
+  "skip": ["initiative rules argument", "sandwich break"]
+}
