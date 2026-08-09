@@ -55,7 +55,6 @@ public sealed record VoiceInstallRequest(
     string Name,
     string Description,
     string Locale,
-    string Style,
     VoiceInstallPlan Plan,
     VoiceProvenance? Source = null,
     string? SuppliedAudioPath = null);

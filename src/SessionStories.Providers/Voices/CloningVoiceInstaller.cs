@@ -58,7 +58,6 @@ public sealed class CloningVoiceInstaller(
             Name: request.Name,
             Description: request.Description,
             Locale: request.Locale,
-            Style: VoiceStyle.Normalize(request.Style),
             EngineId: engineId,
             EngineData: new Dictionary<string, string>(StringComparer.Ordinal)
             {

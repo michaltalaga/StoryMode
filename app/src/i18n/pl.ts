@@ -448,7 +448,9 @@ export const pl: Strings = {
   voiceStyleCalm: 'Spokojnie',
   voiceStyleNatural: 'Naturalnie',
   voiceStyleLively: 'Żywo',
+  /** Reused by the story builder, where the choice actually lives. */
   voicesStyleLabel: 'Sposób czytania',
+  builderDeliveryHint: 'Jak ma być czytana ta opowieść. Głos zostaje ten sam — raport bitewny i bajka na dobranoc potrzebują po prostu innego tempa.',
   voicesRerecord: 'Nagraj próbkę jeszcze raz',
   voicesSetDefault: 'Ustaw jako domyślny',
   voicesRename: 'Zmień nazwę',

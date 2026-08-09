@@ -68,7 +68,6 @@ public sealed class PiperVoiceInstaller(
             Name: request.Name,
             Description: request.Description,
             Locale: request.Locale,
-            Style: Core.Tts.VoiceStyle.Normalize(request.Style),
             EngineId: engineId,
             EngineData: new Dictionary<string, string>(StringComparer.Ordinal) { ["bundle"] = bundle },
             Source: request.Source);

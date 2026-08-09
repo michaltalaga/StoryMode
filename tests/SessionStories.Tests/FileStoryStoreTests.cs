@@ -401,6 +401,33 @@ public sealed class FileStoryStoreTests : IDisposable
         Assert.Null(info.Voice);
         Assert.Empty(info.VoiceOverrides);
         Assert.Null(info.TargetMinutes);
+        // No delivery is not an error: the render resolves it to the default.
+        Assert.Null(info.Delivery);
+    }
+
+    [Fact]
+    public void ReadSessionInfo_ReadsDelivery_WhichBelongsToTheStoryNotTheVoice()
+    {
+        var id = NewStory();
+        WriteRaw(id, "session.michal.json",
+            "{ \"schema\": 1, \"voice\": \"narrator\", \"delivery\": \"lively\" }");
+
+        var info = _store.ReadSessionInfo(id, "michal")!;
+
+        Assert.Equal("narrator", info.Voice);
+        // The same narrator reads a battle report differently from a bedtime story.
+        Assert.Equal("lively", info.Delivery);
+    }
+
+    [Fact]
+    public void CreateStory_SeedsADeliverySoTheFieldIsDiscoverableByHand()
+    {
+        var id = _store.CreateStory("2026-08-09-delivery", "generic-fantasy", "michal", "Delivery", "en");
+
+        var raw = _store.ReadFile(id, "session.michal.json")!.Text;
+
+        Assert.Contains("\"delivery\"", raw);
+        Assert.Equal("natural", _store.ReadSessionInfo(id, "michal")!.Delivery);
     }
 
     [Fact]

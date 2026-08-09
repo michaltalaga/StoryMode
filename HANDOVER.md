@@ -314,10 +314,17 @@ contract) invalidated a few details:
   configuration file, learns about it. In particular the piper bundle name moved out
   of `appsettings.json` and onto the voice, because a voice you cannot add without
   editing config is a voice the app cannot really offer.
-- **Delivery is a named style, never a number.** A voice stores `calm`/`natural`/`lively`;
-  each provider declares those ids over whatever knobs it actually has, and the job
-  runner resolves them at render time. Two engines with unrelated knobs
-  (`exaggeration`+`cfg` vs `speed`) share one control and the numbers stay backstage.
+- **Delivery is a named style, never a number — and it belongs to the story.**
+  `calm`/`natural`/`lively` lives in `session.<variant>.json` as `delivery`. It was on
+  the voice first, which was wrong: a voice is *who is speaking* and stays put, while
+  delivery is *how this story is read* — the same narrator wants different pacing for
+  a battle report and a bedtime story. On the voice it forced one delivery across
+  every story that voice narrated, and silently staled the voice's sample every time
+  it changed. Each provider declares the same three ids over whatever knobs it
+  actually has, and the job runner resolves them against the chosen voice's engine at
+  render time, so two engines with unrelated knobs (`exaggeration`+`cfg` vs `speed`)
+  share one control and the numbers stay backstage. A voice's sample is always the
+  neutral delivery, which is why it cannot go stale.
 - **Recording a voice needs https, so the app serves both.** Browsers hide the
   microphone on an insecure origin, which made "record grandma reading" impossible
   over the plain-http LAN address. Kestrel now also listens on `:5212` with the

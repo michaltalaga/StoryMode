@@ -47,8 +47,8 @@ Installed voices:
 
 | Route | Notes |
 |---|---|
-| `GET /api/voices` | `[{id, name, description, locale, style, styles[], isDefault, hasSample, attribution, license}]` — `[]` when no catalog. `id` is the stable key stories point at and is never displayed; `style` is one of `styles` |
-| `PATCH /api/voices/{id}` | `{name?, description?, style?}` — the only fields a reader may change. `200` with the item; 400 on an empty name or unknown style, 404 when not installed |
+| `GET /api/voices` | `[{id, name, description, locale, styles[], isDefault, hasSample, attribution, license}]` — `[]` when no catalog. `id` is the stable key stories point at and is never displayed; `styles` lists the deliveries this voice's engine can do, which is options rather than a setting (see Delivery below) |
+| `PATCH /api/voices/{id}` | `{name?, description?}` — the only fields a reader may change. `200` with the item; 400 on an empty name, 404 when not installed |
 | `DELETE /api/voices/{id}?deleteWav=` | `204`. Removes the entry, its `library/voice-previews/<id>.mp3` and its `library/voice-cache/<id>` folder, and clears `default` when it pointed here. The reference recording may back several voices, so it stays unless `deleteWav=true`. 404 when absent |
 | `PUT /api/voices/default` | `{id}` → `204`; 404 when not installed |
 | `GET/PUT /api/voices/catalog` | raw `library/voices.json` text, ETag / If-Match like the universe files (428 without `If-Match`, 409 + current content on mismatch) — the escape hatch |
@@ -127,11 +127,21 @@ voice carries its engine's private settings in `engineData`, passed through to t
 native espeak-ng phonemization). That bundle name lives **on the voice**, which is what makes
 UI-driven installs possible; it is deliberately no longer configured in `appsettings.json`.
 
-**Delivery styles**: a voice stores a named style (`calm`/`natural`/`lively`), never raw knobs.
-Each provider declares the same ids over whatever knobs it actually has
-(`TtsCapabilities.StylePresets`), and the job runner resolves style → knobs at render time; a
-session's `voiceOverrides` still wins on top, preserving the files-on-disk bypass. Two engines with
-unrelated knobs therefore share one control, and the numbers never reach the client.
+**Delivery** is a named style (`calm`/`natural`/`lively`) stored on the **story**, as
+`delivery` in `session.<variant>.json` — not on the voice. A voice answers *who is speaking*, which
+is stable; delivery answers *how this story is read*, and the same narrator wants different pacing
+for a battle report and a bedtime story. Putting it on the voice forced one delivery across every
+story that voice narrated and quietly staled its sample.
+
+Each provider declares the same three ids over whatever knobs it actually has
+(`TtsCapabilities.StylePresets`); the job runner resolves delivery → knobs at render time against
+the chosen voice's engine, and the session's `voiceOverrides` still wins on top, preserving the
+files-on-disk bypass. Two engines with unrelated knobs therefore share one control and the numbers
+never reach the client. `GET /api/voices` exposes `styles` — the deliveries that voice's engine
+*can* do, so the story builder can offer them — but no current setting.
+
+A voice's sample is always rendered at the neutral delivery: it answers "what does this person
+sound like", which is why it never goes stale.
 
 **Installers**: `IVoiceInstaller` per engine turns an offer (or a reader's recording) into an
 installed voice — downloading, unpacking, converting and caching. Registering one is the only step

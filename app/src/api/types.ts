@@ -137,9 +137,11 @@ export interface VoiceDto {
   description: string;
   /** BCP-47, e.g. "en-US" / "pl-PL" — drives the flag and the language name. */
   locale: string;
-  /** A VoiceStyle id: 'calm' | 'natural' | 'lively'. */
-  style: string;
-  /** The deliveries this voice's engine offers, in display order. */
+  /**
+   * The deliveries this voice's engine can do ('calm' | 'natural' | 'lively'), in display order.
+   * Options, not a setting: which one is used lives on the story, because how a narrator reads
+   * belongs to what is being read, not to who is reading.
+   */
   styles: string[];
   isDefault: boolean;
   /** Install guarantees a sample; false means something went wrong and the card says so. */
@@ -172,7 +174,6 @@ export interface VoiceOfferDto {
 export interface VoicePatch {
   name?: string;
   description?: string;
-  style?: string;
 }
 
 // ---------------------------------------------------------------------------

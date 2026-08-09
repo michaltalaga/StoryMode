@@ -34,9 +34,8 @@ public sealed class FileVoiceStoreTests : IDisposable
     }
 
     private static InstalledVoice Voice(string id, string name, string engine = "chatterbox-onnx",
-        string locale = "en-US", string style = VoiceStyle.Natural,
-        Dictionary<string, string>? engineData = null, VoiceProvenance? source = null)
-        => new(id, name, "", locale, style, engine, engineData ?? [], source);
+        string locale = "en-US", Dictionary<string, string>? engineData = null, VoiceProvenance? source = null)
+        => new(id, name, "", locale, engine, engineData ?? [], source);
 
     // ---- catalog parsing (schema 2) ------------------------------------------------------
 
@@ -78,7 +77,6 @@ public sealed class FileVoiceStoreTests : IDisposable
         Assert.Equal("Narrator", narrator.Name);
         Assert.Equal("Even and unhurried.", narrator.Description);
         Assert.Equal("en-US", narrator.Locale);
-        Assert.Equal(VoiceStyle.Calm, narrator.Style);
         Assert.Equal("chatterbox-onnx", narrator.EngineId);
         Assert.Equal("narrator.wav", narrator.EngineData["referenceWav"]);
         Assert.Equal("MIT", narrator.Source!.License);
@@ -86,8 +84,6 @@ public sealed class FileVoiceStoreTests : IDisposable
         var gosia = catalog.Voices["gosia"];
         Assert.Equal("piper-onnx", gosia.EngineId);
         Assert.Equal("vits-piper-pl_PL-gosia-medium", gosia.EngineData["bundle"]);
-        // Style is absent in the file: every voice still has one.
-        Assert.Equal(VoiceStyle.Default, gosia.Style);
         Assert.Null(gosia.Source);
     }
 
@@ -129,8 +125,6 @@ public sealed class FileVoiceStoreTests : IDisposable
         Assert.Equal("en-US", en.Locale);
         // The reference wav was a first-class field; it is engine-private now.
         Assert.Equal("narrator-en-dry.wav", en.EngineData["referenceWav"]);
-        // 0.65 exaggeration is the "natural" preset.
-        Assert.Equal(VoiceStyle.Natural, en.Style);
         // Nothing to show a reader existed, so the id becomes a starting name.
         Assert.Equal("Narrator En Dry", en.Name);
 
@@ -138,21 +132,6 @@ public sealed class FileVoiceStoreTests : IDisposable
 
         // A read must never rewrite: hand-editing the file and reloading has to be safe.
         Assert.Equal(before, _store.ReadCatalogFile()!.Text);
-    }
-
-    [Theory]
-    [InlineData(0.2, VoiceStyle.Calm)]
-    [InlineData(0.65, VoiceStyle.Natural)]
-    [InlineData(0.95, VoiceStyle.Lively)]
-    public void ReadCatalog_MapsLegacyExaggerationOntoTheNearestStyle(double exaggeration, string expected)
-    {
-        // Invariant on purpose: this machine's culture writes "0,2", which is not JSON.
-        var value = exaggeration.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        WriteCatalogRaw($$"""
-            { "voices": { "v": { "provider": "chatterbox-onnx", "languages": ["en"], "exaggeration": {{value}} } } }
-            """);
-
-        Assert.Equal(expected, _store.ReadCatalog()!.Voices["v"].Style);
     }
 
     [Fact]
@@ -177,7 +156,6 @@ public sealed class FileVoiceStoreTests : IDisposable
         Assert.Equal("Gosia", voice.Name);
         Assert.Equal("piper-onnx", voice.EngineId);
         Assert.Equal("pl-PL", voice.Locale);
-        Assert.Equal(VoiceStyle.Lively, voice.Style);
 
         var raw = _store.ReadCatalogFile()!.Text;
         // The old fields would otherwise be a second, contradicting source of truth.
@@ -199,7 +177,6 @@ public sealed class FileVoiceStoreTests : IDisposable
         Assert.Equal("Bare", bare.Name);
         Assert.Equal("chatterbox-onnx", bare.EngineId);
         Assert.Equal("en-US", bare.Locale);
-        Assert.Equal(VoiceStyle.Default, bare.Style);
         Assert.Empty(bare.EngineData);
     }
 
@@ -304,13 +281,12 @@ public sealed class FileVoiceStoreTests : IDisposable
 
         Assert.True(_store.UpsertVoice(Voice("gosia", "Gosia", "piper-onnx", "pl-PL",
             engineData: new Dictionary<string, string> { ["bundle"] = "vits-piper-pl_PL-gosia-medium" })));
-        Assert.False(_store.UpsertVoice(Voice("narrator", "The Narrator", style: VoiceStyle.Calm,
+        Assert.False(_store.UpsertVoice(Voice("narrator", "The Narrator",
             engineData: new Dictionary<string, string> { ["referenceWav"] = "narrator.wav" })));
 
         var catalog = _store.ReadCatalog()!;
         Assert.Equal("pl-PL", catalog.Voices["gosia"].Locale);
         Assert.Equal("The Narrator", catalog.Voices["narrator"].Name);
-        Assert.Equal(VoiceStyle.Calm, catalog.Voices["narrator"].Style);
         Assert.Equal("narrator", catalog.Default);
 
         var raw = _store.ReadCatalogFile()!.Text;
@@ -322,26 +298,17 @@ public sealed class FileVoiceStoreTests : IDisposable
     [Fact]
     public void PatchVoice_AppliesOnlyTheFieldsGiven_AndFailsOnUnknownId()
     {
-        _store.UpsertVoice(Voice("v", "Gosia", "piper-onnx", "pl-PL", VoiceStyle.Calm));
+        _store.UpsertVoice(Voice("v", "Gosia", "piper-onnx", "pl-PL"));
 
-        Assert.True(_store.PatchVoice("v", new VoiceEdit(Style: VoiceStyle.Lively)));
+        Assert.True(_store.PatchVoice("v", new VoiceEdit(Description: "Measured and even.")));
         Assert.False(_store.PatchVoice("nope", new VoiceEdit(Name: "Ghost")));
 
         var voice = _store.ReadCatalog()!.Voices["v"];
-        Assert.Equal(VoiceStyle.Lively, voice.Style);
+        Assert.Equal("Measured and even.", voice.Description);
+        // Untouched by the patch — only the named fields move.
         Assert.Equal("Gosia", voice.Name);
         Assert.Equal("piper-onnx", voice.EngineId);
         Assert.Equal("pl-PL", voice.Locale);
-    }
-
-    [Fact]
-    public void PatchVoice_IgnoresAnUnknownStyleRatherThanStoringIt()
-    {
-        _store.UpsertVoice(Voice("v", "V"));
-
-        Assert.True(_store.PatchVoice("v", new VoiceEdit(Style: "shouty")));
-
-        Assert.Equal(VoiceStyle.Default, _store.ReadCatalog()!.Voices["v"].Style);
     }
 
     [Fact]

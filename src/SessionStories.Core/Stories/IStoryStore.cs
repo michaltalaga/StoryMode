@@ -76,13 +76,19 @@ public sealed record VerifyFlag(string Rule, string Detail);
 
 public sealed record OutlineScene(string SceneId, string Title, int? TargetWords);
 
+/// <param name="Delivery">
+/// How this variant should be read — a <see cref="Tts.VoiceStyle"/> id. It belongs to the story
+/// rather than to the voice: the same narrator reads a bedtime story and a battle report
+/// differently, and a voice is who is speaking, not how. Null means the default.
+/// </param>
 public sealed record SessionInfo(
     string Universe,
     string Language,
     string Pov,
     string? Voice,
     IReadOnlyDictionary<string, double> VoiceOverrides,
-    int? TargetMinutes);
+    int? TargetMinutes,
+    string? Delivery = null);
 
 public sealed record PendingFact(string FactId, string Text, string? SceneId);
 

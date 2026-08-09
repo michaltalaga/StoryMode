@@ -198,8 +198,9 @@ public sealed class JobRunnerService(
                 $"No voice: session.{job.Variant}.json has no voice and library/voices.json has no default.");
         var voice = RequireVoice(catalog, voiceId, job.Variant);
 
-        // Knobs: the voice's named style, overridden by the session's voiceOverrides (files-on-disk wins).
-        var knobs = new Dictionary<string, double>(StyleKnobs(voice));
+        // Knobs: this story's delivery resolved against the voice's engine, then the session's
+        // voiceOverrides on top (files-on-disk wins).
+        var knobs = new Dictionary<string, double>(StyleKnobs(voice.EngineId, session.Delivery));
         foreach (var (name, value) in session.VoiceOverrides)
             knobs[name] = value;
 
@@ -216,7 +217,7 @@ public sealed class JobRunnerService(
         var progress = new DelegateProgress<TtsProgress>(
             p => job.AppendLog($"tts {p.ChunkIndex}/{p.ChunkCount}: {p.Message}"));
 
-        job.AppendLog($"voice '{voice.Name}' ({voice.Locale}, {voice.Style})");
+        job.AppendLog($"voice '{voice.Name}' ({voice.Locale}), delivery {VoiceStyle.Normalize(session.Delivery)}");
         await SynthesizeWithEngineAsync(job, voice, request, progress, ct);
         job.AppendLog($"wrote audio/{job.Variant}.mp3");
     }
@@ -237,11 +238,12 @@ public sealed class JobRunnerService(
             "Add it under Settings → Voices, or point this story at a voice you have.");
     }
 
-    /// <summary>Resolves the voice's named style to whatever knobs its engine actually has.</summary>
-    private IReadOnlyDictionary<string, double> StyleKnobs(InstalledVoice voice)
+    /// <summary>Resolves a named delivery to whatever knobs the given engine actually has.</summary>
+    private IReadOnlyDictionary<string, double> StyleKnobs(string engineId, string? delivery)
     {
-        var presets = ttsCapabilities.GetValueOrDefault(voice.EngineId)?.StylePresets ?? [];
-        var preset = presets.FirstOrDefault(p => string.Equals(p.Id, voice.Style, StringComparison.OrdinalIgnoreCase))
+        var presets = ttsCapabilities.GetValueOrDefault(engineId)?.StylePresets ?? [];
+        var wanted = VoiceStyle.Normalize(delivery);
+        var preset = presets.FirstOrDefault(p => string.Equals(p.Id, wanted, StringComparison.OrdinalIgnoreCase))
             ?? presets.FirstOrDefault(p => p.Id == VoiceStyle.Default);
         return preset?.Knobs ?? new Dictionary<string, double>();
     }
@@ -354,8 +356,10 @@ public sealed class JobRunnerService(
         // Atomic: render to a scratch file so a failed or cancelled render never half-replaces a good sample.
         var tempPath = outputPath + ".tmp";
 
-        var request = new TtsRequest(text, language, voice.Id, tempPath, StyleKnobs(voice),
-            EngineData: voice.EngineData);
+        // A sample answers "what does this person sound like", so it is always the neutral
+        // delivery — how a given story is read is that story's business.
+        var request = new TtsRequest(text, language, voice.Id, tempPath,
+            StyleKnobs(voice.EngineId, VoiceStyle.Default), EngineData: voice.EngineData);
         var progress = new DelegateProgress<TtsProgress>(
             p => job.AppendLog($"sample {p.ChunkIndex}/{p.ChunkCount}: {p.Message}"));
 

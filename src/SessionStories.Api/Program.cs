@@ -213,10 +213,8 @@ api.MapPatch("/voices/{id}", (string id, PatchVoiceRequest request, IVoiceStore 
         return Problem(400, "Invalid voice id");
     if (request.Name is { } name && string.IsNullOrWhiteSpace(name))
         return Problem(400, "A voice needs a name");
-    if (request.Style is { } style && !VoiceStyle.All.Contains(style, StringComparer.OrdinalIgnoreCase))
-        return Problem(400, $"Unknown style '{style}'. Known: {string.Join(", ", VoiceStyle.All)}");
 
-    return voices.PatchVoice(id, new VoiceEdit(request.Name, request.Description, request.Style))
+    return voices.PatchVoice(id, new VoiceEdit(request.Name, request.Description))
         ? Results.Ok(ReadVoiceView(voices, ttsCapabilities, id))
         : Problem(404, $"Voice '{id}' is not installed");
 });
@@ -303,7 +301,6 @@ api.MapPost("/voices/install", (InstallVoiceRequest request, IVoiceGallery galle
             Name: name,
             Description: offer.Description,
             Locale: offer.Locale,
-            Style: VoiceStyle.Default,
             Plan: offer.Plan,
             Source: new VoiceProvenance(offer.Key, offer.License, offer.Attribution)),
     });
@@ -370,7 +367,6 @@ api.MapPost("/voices/from-recording", async (HttpRequest http, IVoiceStore voice
             Name: name,
             Description: form["description"].ToString().Trim(),
             Locale: locale,
-            Style: VoiceStyle.Default,
             Plan: new VoiceInstallPlan(engineId),
             Source: null,
             SuppliedAudioPath: uploadPath),
@@ -896,9 +892,8 @@ static object VoiceView(IVoiceStore voices, IReadOnlyDictionary<string, TtsCapab
     name = voice.Name,
     description = voice.Description,
     locale = voice.Locale,
-    style = voice.Style,
-    // Which deliveries this voice's engine offers — every engine declares all three today, but the
-    // UI renders what it is told rather than assuming.
+    // The deliveries this voice's engine can do. Options, not a setting: which one a story uses is
+    // that story's `delivery`, because how a narrator reads belongs to what is being read.
     styles = capabilities.GetValueOrDefault(voice.EngineId)?.StylePresets.Select(preset => preset.Id).ToArray()
         ?? [.. VoiceStyle.All],
     isDefault = string.Equals(voice.Id, catalog.Default, StringComparison.Ordinal),
@@ -1022,7 +1017,7 @@ sealed record CreateJobRequest(JobType Type, string? Variant, string? SceneId, s
 sealed record ApproveFactsRequest(string[] AcceptedLineIds);
 
 /// <summary>Everything a reader may change about a voice after it is installed.</summary>
-sealed record PatchVoiceRequest(string? Name, string? Description, string? Style);
+sealed record PatchVoiceRequest(string? Name, string? Description);
 
 /// <summary>Install a voice off the shelf. Name is optional — the offer's own name is the default.</summary>
 sealed record InstallVoiceRequest(string? Key, string? Name);

@@ -74,17 +74,20 @@ public sealed record VoiceCatalog(IReadOnlyDictionary<string, InstalledVoice> Vo
 /// voice can be renamed without breaking a single story.
 /// </summary>
 /// <param name="Locale">BCP-47, e.g. "en-US" or "pl-PL" — drives the flag and the language name.</param>
-/// <param name="Style">A <see cref="Tts.VoiceStyle"/> id; resolved to engine knobs only at render time.</param>
 /// <param name="EngineData">
 /// Engine-private settings, written by the installer that produced this voice and read only by that
 /// engine (piper: <c>bundle</c>; cloning engines: <c>referenceWav</c>). Nothing else may interpret it.
 /// </param>
+/// <remarks>
+/// Deliberately carries no delivery. How a narrator reads is a property of the story being read —
+/// see <see cref="Stories.SessionInfo.Delivery"/> — not of the person reading, and hanging it here
+/// forced one delivery across every story a voice narrated while quietly staling its sample.
+/// </remarks>
 public sealed record InstalledVoice(
     string Id,
     string Name,
     string Description,
     string Locale,
-    string Style,
     string EngineId,
     IReadOnlyDictionary<string, string> EngineData,
     VoiceProvenance? Source = null);
@@ -93,7 +96,7 @@ public sealed record InstalledVoice(
 public sealed record VoiceProvenance(string Shelf, string License, string Attribution);
 
 /// <summary>The only fields a reader may change after install. Null means "leave alone".</summary>
-public sealed record VoiceEdit(string? Name = null, string? Description = null, string? Style = null);
+public sealed record VoiceEdit(string? Name = null, string? Description = null);
 
 /// <summary>Locale helpers. Engines speak a bare language code; the catalog and UI speak BCP-47.</summary>
 public static class VoiceLocale

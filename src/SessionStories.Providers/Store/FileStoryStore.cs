@@ -76,6 +76,9 @@ public sealed class FileStoryStore(string storiesRoot) : IStoryStore
             ["tone"] = "",
             ["targetMinutes"] = null,
             ["voice"] = "",
+            // calm | natural | lively — how this variant is read, resolved to engine knobs at
+            // render time. voiceOverrides still wins for anyone who wants the raw numbers.
+            ["delivery"] = "natural",
             ["voiceOverrides"] = new JsonObject(),
             ["sources"] = new JsonObject
             {
@@ -342,7 +345,8 @@ public sealed class FileStoryStore(string storiesRoot) : IStoryStore
             GetString(root, "pov") ?? "",
             string.IsNullOrWhiteSpace(voice) ? null : voice,
             overrides,
-            targetMinutes);
+            targetMinutes,
+            GetString(root, "delivery"));
     }
 
     public IReadOnlyList<PendingFact> ReadPendingFacts(string storyId, string variant)

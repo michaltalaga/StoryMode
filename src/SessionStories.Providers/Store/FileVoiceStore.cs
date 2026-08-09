@@ -100,7 +100,6 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
         entry["name"] = voice.Name;
         entry["description"] = voice.Description;
         entry["locale"] = voice.Locale;
-        entry["style"] = voice.Style;
         entry["engine"] = voice.EngineId;
         entry["engineData"] = ToObject(voice.EngineData);
         if (voice.Source is { } source)
@@ -137,7 +136,6 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
         {
             Name = string.IsNullOrWhiteSpace(edit.Name) ? current.Name : edit.Name.Trim(),
             Description = edit.Description?.Trim() ?? current.Description,
-            Style = edit.Style is null ? current.Style : VoiceStyle.Normalize(edit.Style),
         });
         return true;
     }
@@ -234,9 +232,6 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
             Name: GetString(entry, "name") is { Length: > 0 } name ? name : HumanizeId(id),
             Description: GetString(entry, "description") ?? "",
             Locale: locale,
-            Style: isSchema2
-                ? VoiceStyle.Normalize(GetString(entry, "style"))
-                : StyleFromLegacyKnobs(GetDouble(entry, "exaggeration")),
             EngineId: GetString(entry, "engine") is { Length: > 0 } engine ? engine
                 : GetString(entry, "provider") is { Length: > 0 } provider ? provider
                 : DefaultEngineId,
@@ -261,15 +256,6 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
                 return s;
         return null;
     }
-
-    /// <summary>Schema 1 stored raw exaggeration; map it onto the nearest named style.</summary>
-    private static string StyleFromLegacyKnobs(double? exaggeration) => exaggeration switch
-    {
-        null => VoiceStyle.Default,
-        < 0.5 => VoiceStyle.Calm,
-        < 0.8 => VoiceStyle.Natural,
-        _ => VoiceStyle.Lively,
-    };
 
     /// <summary>"narrator-pl-gosia" → "Narrator Pl Gosia". Only ever a starting point — it is renamable.</summary>
     private static string HumanizeId(string id)

@@ -123,20 +123,6 @@ function LanguageSection() {
 // Voices
 // ---------------------------------------------------------------------------
 
-/** Style ids come from the backend; the label is ours. Unknown ids show as-is. */
-function styleLabel(style: string, strings: Strings): string {
-  switch (style) {
-    case 'calm':
-      return strings.voiceStyleCalm
-    case 'natural':
-      return strings.voiceStyleNatural
-    case 'lively':
-      return strings.voiceStyleLively
-    default:
-      return style
-  }
-}
-
 function Spinner() {
   return (
     <span
@@ -163,14 +149,12 @@ function DotsIcon() {
 function VoiceMenu({
   voice,
   onSetDefault,
-  onSetStyle,
   onRename,
   onRerecord,
   onDelete,
 }: {
   voice: VoiceDto
   onSetDefault: () => void
-  onSetStyle: (style: string) => void
   onRename: () => void
   onRerecord: () => void
   onDelete: () => void
@@ -203,29 +187,6 @@ function VoiceMenu({
           <Dialog.Description className="mt-1 px-3 text-sm font-medium text-stone-800">
             {voice.name}
           </Dialog.Description>
-
-          {voice.styles.length > 1 && (
-            <div className="mt-4 px-3">
-              <span className={labelCls}>{strings.voicesStyleLabel}</span>
-              <div role="group" className="inline-flex w-full overflow-hidden rounded-lg border border-stone-300">
-                {voice.styles.map((style) => (
-                  <button
-                    key={style}
-                    type="button"
-                    aria-pressed={voice.style === style}
-                    onClick={() => onSetStyle(style)}
-                    className={`min-h-11 flex-1 px-2 text-sm font-medium transition-colors ${
-                      voice.style === style
-                        ? 'bg-stone-900 text-white'
-                        : 'bg-white text-stone-600 hover:bg-stone-100'
-                    }`}
-                  >
-                    {styleLabel(style, strings)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           <div className="mt-3 space-y-1">
             {!voice.isDefault && (
@@ -371,7 +332,6 @@ function VoiceRow({
   busy,
   onPlay,
   onSetDefault,
-  onSetStyle,
   onRename,
   onRerecord,
   onDelete,
@@ -382,7 +342,6 @@ function VoiceRow({
   busy: boolean
   onPlay: () => void
   onSetDefault: () => void
-  onSetStyle: (style: string) => void
   onRename: () => void
   onRerecord: () => void
   onDelete: () => void
@@ -403,7 +362,6 @@ function VoiceRow({
           <VoiceMenu
             voice={voice}
             onSetDefault={onSetDefault}
-            onSetStyle={onSetStyle}
             onRename={onRename}
             onRerecord={onRerecord}
             onDelete={onDelete}
@@ -412,8 +370,6 @@ function VoiceRow({
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-500">
           <Flag locale={voice.locale} />
           <span>{localeLabel(voice.locale, strings)}</span>
-          <span aria-hidden>·</span>
-          <span>{styleLabel(voice.style, strings)}</span>
         </p>
         {voice.description.length > 0 && (
           <p className="mt-1 text-sm leading-snug text-stone-500">{voice.description}</p>
@@ -885,9 +841,6 @@ function VoicesSection() {
                     busy={busySamples.has(voice.id)}
                     onPlay={() => player.toggle(url)}
                     onSetDefault={() => void run(setDefaultVoice.mutateAsync(voice.id))}
-                    onSetStyle={(style) =>
-                      void run(patchVoice.mutateAsync({ id: voice.id, patch: { style } }))
-                    }
                     onRename={() => setRenaming(voice)}
                     onRerecord={() => void onRerecord(voice)}
                     onDelete={() => setDeleting(voice)}

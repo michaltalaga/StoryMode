@@ -447,7 +447,9 @@ export const en = {
   voiceStyleCalm: 'Calm',
   voiceStyleNatural: 'Natural',
   voiceStyleLively: 'Lively',
+  /** Reused by the story builder, where the choice actually lives. */
   voicesStyleLabel: 'Delivery',
+  builderDeliveryHint: 'How this story is read. The voice stays the same — a battle report and a bedtime story just want different pacing.',
   voicesRerecord: 'Record the sample again',
   voicesSetDefault: 'Make default',
   voicesRename: 'Rename',

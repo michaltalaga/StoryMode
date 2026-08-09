@@ -37,6 +37,13 @@ const aliases = (strings: Strings) => ({
   targetMinutes: strings.builderTargetMinutesLabel,
   voice: strings.builderVoiceLabel,
   voiceDefault: strings.builderVoiceDefault,
+  // Delivery belongs to the story, not the voice: the same narrator reads a battle report
+  // differently from a bedtime story.
+  delivery: strings.voicesStyleLabel,
+  deliveryHint: strings.builderDeliveryHint,
+  deliveryCalm: strings.voiceStyleCalm,
+  deliveryNatural: strings.voiceStyleNatural,
+  deliveryLively: strings.voiceStyleLively,
   language: strings.languageLabel,
   langPl: strings.languagePl,
   langEn: strings.languageEn,
@@ -472,6 +479,8 @@ export default function SessionBuilder() {
   const povOptions = pov !== '' && !castRefs.includes(pov) ? [...castRefs, pov] : castRefs;
   const skipList = Array.isArray(doc.skip) ? doc.skip : [];
   const voiceId = asStr(doc.voice);
+  // Absent in older session files, and that is fine — the render resolves it to the default.
+  const delivery = asStr(doc.delivery) || 'natural';
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 pt-4">
@@ -700,6 +709,28 @@ export default function SessionBuilder() {
               ))}
               {voiceId !== '' && !voices.some((v) => v.id === voiceId) && <option value={voiceId}>{voiceId}</option>}
             </select>
+          </Section>
+          <Section title={t.delivery}>
+            {/* Which deliveries exist is the chosen voice's engine's business; the reader picks
+                a word. Falls back to the three every engine declares when no voice is chosen. */}
+            <div role="group" className="inline-flex w-full overflow-hidden rounded-lg border border-stone-300">
+              {(voices.find((v) => v.id === voiceId)?.styles ?? ['calm', 'natural', 'lively']).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={delivery === option}
+                  onClick={() => mutate(() => ({ delivery: option }))}
+                  className={`min-h-11 flex-1 px-2 text-sm font-medium transition-colors ${
+                    delivery === option
+                      ? 'bg-stone-900 text-white'
+                      : 'bg-white text-stone-600 hover:bg-stone-100'
+                  }`}
+                >
+                  {option === 'calm' ? t.deliveryCalm : option === 'lively' ? t.deliveryLively : t.deliveryNatural}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-stone-500">{t.deliveryHint}</p>
           </Section>
           <Section title={t.language}>
             <select value={language} onChange={(e) => mutate(() => ({ language: e.target.value }))} className={inputCls}>
