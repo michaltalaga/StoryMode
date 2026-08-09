@@ -133,7 +133,7 @@ Zoe przypomniała sobie, że w wiosce nikt nie umiał powiedzieć, jak klejnot w
 
 Wynosili to w czterech turach, bo lampa była jedna i nikt nie chciał chodzić bez niej. Drzwi zostawili otwarte. Klucz Zoe schowała za pazuchę, bo nikt się o niego nie upomniał. Potem szli z tym w dół.
 
-Do wioski weszli po południu, tą samą drogą, którą przyszli za pierwszym razem. Tym razem chłopak z wiadrem nie zszedł im z drogi, tylko został i patrzył.
+Do wioski weszli po południu.
 
 Starszy siedział przy studni z uprzężą na kolanach.
 

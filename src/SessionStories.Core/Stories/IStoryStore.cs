@@ -39,6 +39,14 @@ public interface IStoryStore
     /// </summary>
     void SpliceSceneFromScratch(string storyId, string variant, string sceneId);
 
+    /// <summary>
+    /// Removes the '## &lt;sceneId&gt;' section from verify.&lt;variant&gt;.md — a rewritten scene
+    /// invalidates its findings; verification is re-run explicitly. Other sections (incl.
+    /// '## global') keep their exact bytes; the file is deleted when no sections remain.
+    /// No-op when the file is absent or has no section for this scene.
+    /// </summary>
+    void ClearVerifyFindings(string storyId, string variant, string sceneId);
+
     /// <summary>Parses outline.&lt;variant&gt;.md scene headings in document order.</summary>
     IReadOnlyList<OutlineScene> ReadOutlineScenes(string storyId, string variant);
 

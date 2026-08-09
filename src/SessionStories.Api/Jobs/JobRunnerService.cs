@@ -157,7 +157,11 @@ public sealed class JobRunnerService(
         var result = await RunLoggedStageAsync(job, GenerationStage.Regen, context, $"regen {sceneId}", ct);
         ThrowIfStageFailed($"regen {sceneId}", result);
         stories.SpliceSceneFromScratch(job.StoryId, job.Variant, sceneId);
-        job.AppendLog($"spliced {sceneId} into draft.{job.Variant}.md");
+        // docs/api.md: the rewritten scene invalidates its verify findings; the user re-runs
+        // verification explicitly. (The full Generate pipeline skips this — its verify stage
+        // rewrites the whole report right after the scenes anyway.)
+        stories.ClearVerifyFindings(job.StoryId, job.Variant, sceneId);
+        job.AppendLog($"spliced {sceneId} into draft.{job.Variant}.md; cleared its verify findings");
     }
 
     private async Task RunVerifyAsync(JobRecord job, CancellationToken ct)

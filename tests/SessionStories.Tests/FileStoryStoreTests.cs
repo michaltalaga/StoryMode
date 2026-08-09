@@ -278,6 +278,58 @@ public sealed class FileStoryStoreTests : IDisposable
         Assert.Empty(_store.ReadDraftScenes(NewStory(), "michal"));
     }
 
+    // ---- ClearVerifyFindings ------------------------------------------------------------
+
+    [Fact]
+    public void ClearVerifyFindings_MiddleSection_PreservesOtherSectionsByteForByte()
+    {
+        var id = NewStory();
+        // mixed newlines and trailing spaces on purpose — untouched sections must keep exact bytes
+        WriteRaw(id, "verify.michal.md",
+            "## s1\r\n- [register] narrator slips into modern slang  \r\n\n" +
+            "## s2\n- [anachronism] \"okay\" — constraints.md > Forbidden anachronisms\n- [given-drift] beat b2: draft omits that the wall gave way\n\n" +
+            "## global\n- [naming] \"Steve\" violates naming conventions\n");
+
+        _store.ClearVerifyFindings(id, "michal", "s2");
+
+        Assert.Equal(
+            "## s1\r\n- [register] narrator slips into modern slang  \r\n\n" +
+            "## global\n- [naming] \"Steve\" violates naming conventions\n",
+            ReadRaw(id, "verify.michal.md"));
+    }
+
+    [Fact]
+    public void ClearVerifyFindings_LastSection_DeletesFile()
+    {
+        var id = NewStory();
+        WriteRaw(id, "verify.michal.md", "## s1\n- [tone] too grim for the requested tone\n");
+
+        _store.ClearVerifyFindings(id, "michal", "s1");
+
+        Assert.False(Exists(id, "verify.michal.md"));
+    }
+
+    [Fact]
+    public void ClearVerifyFindings_AbsentFile_IsNoOp()
+    {
+        var id = NewStory();
+
+        _store.ClearVerifyFindings(id, "michal", "s1");
+
+        Assert.False(Exists(id, "verify.michal.md"));
+    }
+
+    [Fact]
+    public void ClearVerifyFindings_NoSectionForScene_LeavesFileAsIs()
+    {
+        var id = NewStory();
+        WriteRaw(id, "verify.michal.md", "No violations found.\n");
+
+        _store.ClearVerifyFindings(id, "michal", "s1");
+
+        Assert.Equal("No violations found.\n", ReadRaw(id, "verify.michal.md"));
+    }
+
     // ---- outline ------------------------------------------------------------------------
 
     [Fact]

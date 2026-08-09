@@ -40,10 +40,17 @@ invocation shape. If code or plan disagrees with this page, this page wins; chan
 | `PUT /api/stories/{sid}/recollections/{file}` | **transcripts only** (`.txt`/`.md`): If-Match guarded. Recordings stay immutable. The no-cleaning rule binds the model, not the human — the UI gates this behind an explicit confirm |
 | `GET/DELETE /api/stories/{sid}/prev/{variant}/{sceneId}` | the `draft.<v>.<sceneId>.prev.md` one-level undo: GET returns its text (404 when absent), DELETE discards it |
 | `GET /api/stories/{sid}/draft/{variant}` | parsed scene DTOs `[{sceneId, title, beats, text, verifyFlags[]}]` — the client never parses draft.md |
-| `PUT /api/stories/{sid}/draft/{variant}/scenes/{sceneId}` | text body + If-Match on the draft file |
+| `PUT /api/stories/{sid}/draft/{variant}/scenes/{sceneId}` | text body + If-Match on the draft file; a successful write **clears that scene's verify findings** (see below) |
 | `GET /api/stories/{sid}/verify/{variant}` | parsed `verify.<variant>.md` |
 | `POST /api/stories/{sid}/bible/{variant}/approve` | `{acceptedLineIds[]}` → appends to universe `bible.md` under dated heading, rewrites pending file, atomically |
 | `GET /api/stories/{sid}/audio/{variant}` | mp3, `enableRangeProcessing: true` (phone seek depends on it) |
+
+**Verify-flag lifecycle**: findings describe the prose they were written against, so any rewrite
+of a scene invalidates that scene's findings. Scene PUT and a successful `regenScene` job both
+remove the `## <sceneId>` section from `verify.<variant>.md` (other sections, incl. `## global`,
+keep their exact bytes; the file is deleted when no sections remain). Findings are never
+regenerated implicitly — the user re-runs verification explicitly via the `verify` job. The full
+`generate` pipeline skips the per-scene clear: its verify stage rewrites the whole report anyway.
 
 ### Jobs
 | Route | Notes |
@@ -78,6 +85,6 @@ and Chatterbox (~2.5–3 GB) must never coexist in VRAM.
 |---|---|---|
 | `transcribe` | — (Whisper.net) | `recollections/<person>.txt` |
 | `generate` | extract → outline → scene s1..sN → verify → bible | session (empty fields only), outline, draft (via scratch-splice), verify.md, bible.pending.md |
-| `regenScene` | regen sN (fresh session) | scratch → splice; previous block saved to `draft.<v>.sN.prev.md` |
+| `regenScene` | regen sN (fresh session) | scratch → splice; previous block saved to `draft.<v>.sN.prev.md`; clears the scene's `verify.<v>.md` section |
 | `verify` | verify | `verify.<v>.md` |
 | `renderTts` | — (Chatterbox ONNX) | `audio/<v>.mp3` |

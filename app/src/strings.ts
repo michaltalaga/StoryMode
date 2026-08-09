@@ -343,6 +343,8 @@ export const strings = {
   sceneRegenPlaceholder: 'Np. mniej opisów, więcej dialogu…',
   enqueueError: 'Nie udało się dodać zadania.',
   renderTtsEnqueueError: 'Nie udało się dodać zadania renderowania.',
+  verifyAgain: 'Weryfikuj ponownie',
+  verifyRunning: 'Weryfikacja…',
   sceneRegenOwnNotesLabel: 'Własne uwagi (opcjonalnie)',
   sceneRegenNothingSelectedHint: 'Zaznacz uwagi albo napisz własne',
 

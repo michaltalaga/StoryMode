@@ -247,6 +247,46 @@ public sealed class FileStoryStore(string storiesRoot) : IStoryStore
         File.Delete(scratchPath);
     }
 
+    public void ClearVerifyFindings(string storyId, string variant, string sceneId)
+    {
+        ValidateName(variant, nameof(variant));
+        ValidateSceneId(sceneId);
+        var path = Path.Combine(RequireStoryDir(storyId), $"verify.{variant}.md");
+        if (!File.Exists(path))
+            return;
+
+        var sb = new StringBuilder();
+        var removing = false;
+        var removedSection = false;
+        var remainingSections = 0;
+        foreach (var (segment, line) in RawLines(File.ReadAllText(path)))
+        {
+            if (line.StartsWith("## ", StringComparison.Ordinal))
+            {
+                removing = line[3..].Trim() == sceneId;
+                if (removing)
+                {
+                    removedSection = true;
+                    continue;
+                }
+                remainingSections++;
+            }
+            else if (removing)
+            {
+                continue; // the section's bullets (and blank lines) go with its heading
+            }
+            sb.Append(segment); // untouched lines keep their exact bytes, terminators included
+        }
+
+        // No section for this scene (e.g. a bare "No violations found." file) — leave it alone.
+        if (!removedSection)
+            return;
+        if (remainingSections == 0)
+            File.Delete(path);
+        else
+            AtomicWrite(path, sb.ToString());
+    }
+
     public IReadOnlyList<OutlineScene> ReadOutlineScenes(string storyId, string variant)
     {
         ValidateName(variant, nameof(variant));

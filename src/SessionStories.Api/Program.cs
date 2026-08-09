@@ -340,6 +340,8 @@ api.MapPut("/stories/{sid}/draft/{variant}/scenes/{sceneId}", async (string sid,
     {
         return ETagConflict(response, ex, "text/markdown; charset=utf-8");
     }
+    // docs/api.md: a rewritten scene invalidates its verify findings; the verify job refreshes them.
+    stories.ClearVerifyFindings(sid, variant, sceneId);
     if (stories.ReadFile(sid, $"draft.{variant}.md") is { } current)
         response.Headers.ETag = QuoteETag(current.ETag);
     return Results.NoContent();

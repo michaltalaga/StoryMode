@@ -7,7 +7,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, ConflictError, del, getWithETag, putWithETag } from '../api/client';
-import { enqueueJob, useDraft, useJobs } from '../api/queries';
+import { enqueueJob, useDraft, useEnqueueJob, useJobs } from '../api/queries';
 import type { JobDto, SceneDto, VerifyFlag } from '../api/types';
 import { strings } from '../strings';
 
@@ -383,6 +383,35 @@ export default function DraftReview() {
     (j) => j.storyId === id && j.variant === variant && (j.state === 'queued' || j.state === 'running'),
   );
 
+  // Aktywna weryfikacja tej historii+wariantu — przycisk w nagłówku pokazuje
+  // spinner i jest zablokowany, dopóki zadanie verify się nie skończy.
+  const verifyActive = jobs.some(
+    (j) =>
+      j.storyId === id &&
+      j.variant === variant &&
+      j.type === 'verify' &&
+      (j.state === 'queued' || j.state === 'running'),
+  );
+
+  // Koniec weryfikacji: po sukcesie zadania verify dociągamy szkic — świeże flagi.
+  const prevVerifyIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const active = jobs
+      .filter(
+        (j) =>
+          j.storyId === id &&
+          j.variant === variant &&
+          j.type === 'verify' &&
+          (j.state === 'queued' || j.state === 'running'),
+      )
+      .map((j) => j.id);
+    const finished = prevVerifyIdsRef.current.filter((jobId) => !active.includes(jobId));
+    prevVerifyIdsRef.current = active;
+    if (finished.length === 0) return;
+    if (jobs.some((j) => finished.includes(j.id) && j.state === 'succeeded'))
+      void queryClient.invalidateQueries({ queryKey: ['draft', id, variant] });
+  }, [jobs, id, variant, queryClient]);
+
   // Koniec regeneracji: dociągamy świeży szkic i porzucamy lokalne edycje tych scen.
   const prevActiveRef = useRef<string[]>([]);
   useEffect(() => {
@@ -477,6 +506,10 @@ export default function DraftReview() {
     },
   });
 
+  // Jawna ponowna weryfikacja — przepisanie sceny czyści jej uwagi po stronie
+  // backendu, więc świeże flagi wymagają zlecenia zadania verify.
+  const verifyMutation = useEnqueueJob();
+
   function resolveConflict(keepMine: boolean) {
     if (!conflict) return;
     etagRef.current = conflict.etag;
@@ -510,6 +543,17 @@ export default function DraftReview() {
         >
           Postęp
         </Link>
+        {scenes.length > 0 && (
+          <button
+            type="button"
+            onClick={() => verifyMutation.mutate({ storyId: id, body: { type: 'verify', variant } })}
+            disabled={verifyActive || verifyMutation.isPending}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-violet-200 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+          >
+            {verifyActive && <Spinner />}
+            {verifyActive ? strings.verifyRunning : strings.verifyAgain}
+          </button>
+        )}
         {scenes.length > 0 && (
           <button
             type="button"
@@ -567,6 +611,10 @@ export default function DraftReview() {
 
       {renderTtsMutation.isError && (
         <p className="mb-4 text-sm text-rose-600">{strings.renderTtsEnqueueError}</p>
+      )}
+
+      {verifyMutation.isError && (
+        <p className="mb-4 text-sm text-rose-600">{strings.enqueueError}</p>
       )}
 
       {/* Telefon: poziomy pasek skoków do scen */}
