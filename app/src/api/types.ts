@@ -7,7 +7,7 @@
 // Enums (C# JobType / JobState / pipeline stage, camelCase string form)
 // ---------------------------------------------------------------------------
 
-export type JobType = 'transcribe' | 'generate' | 'regenScene' | 'verify' | 'renderTts';
+export type JobType = 'transcribe' | 'generate' | 'regenScene' | 'verify' | 'renderTts' | 'previewVoice';
 
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -99,9 +99,57 @@ export interface JobDto {
   logTail: string[];
   /** Recollection file (transcribe jobs). Detail route only. */
   file?: string | null;
+  /** Catalog voice id (previewVoice jobs; storyId/variant are empty for those). */
+  voiceId?: string | null;
   /** Seconds since start (or total when finished). Detail route only. */
   elapsedSeconds?: number | null;
 }
+
+// ---------------------------------------------------------------------------
+// Voices (global — library/voices.json, not a universe file)
+// ---------------------------------------------------------------------------
+
+/** GET /api/voices item. */
+export interface VoiceDto {
+  id: string;
+  provider: string;
+  languages: string[];
+  /** Raw catalog value — a bare file name resolved against library/voices/. */
+  referenceWav?: string | null;
+  knobs: { exaggeration: number | null; cfg: number | null };
+  /** Whether that wav actually exists on disk. */
+  hasReferenceWav: boolean;
+  /** Whether library/voice-previews/<id>.mp3 has been rendered. */
+  hasPreview: boolean;
+  isDefault: boolean;
+  /**
+   * Whether this voice's engine can clone an arbitrary voice from a reference wav.
+   * A property of the engine, not of the catalog entry — fixed-voice engines (piper)
+   * ignore any wav, so for them a reference recording is meaningless.
+   */
+  supportsCloning: boolean;
+}
+
+/** GET /api/voices/providers item — the engines this build has registered. */
+export interface VoiceProviderDto {
+  id: string;
+  supportsCloning: boolean;
+}
+
+/**
+ * POST /api/voices — creates the entry or overwrites its known fields. A null knob
+ * removes it; `referenceWav` and any hand-written JSON on the entry are preserved.
+ */
+export interface VoiceCreate {
+  id: string;
+  provider: string;
+  languages: string[];
+  exaggeration?: number | null;
+  cfg?: number | null;
+}
+
+/** PATCH /api/voices/{id} — only the fields present are written. */
+export type VoicePatch = Partial<Omit<VoiceCreate, 'id'>>;
 
 // ---------------------------------------------------------------------------
 // Facts / universes

@@ -4,7 +4,7 @@ import { audioUrl } from '../api/client';
 import type { StorySummary } from '../api/types';
 import { usePlayerStore } from '../player/playerStore';
 import type { Track } from '../player/playerStore';
-import { strings as t } from '../strings';
+import { useStrings } from '../i18n';
 
 interface Row {
   track: Track;
@@ -34,6 +34,7 @@ function buildRows(stories: StorySummary[]): Row[] {
 
 /** Car-primary listening screen: big controls, tap-to-play queue, mp3 downloads. */
 export default function Listen() {
+  const t = useStrings();
   const { data: stories, isLoading, isError } = useStories();
 
   const queue = usePlayerStore((s) => s.queue);

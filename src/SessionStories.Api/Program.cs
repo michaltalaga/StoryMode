@@ -9,6 +9,7 @@ using SessionStories.Core.Stories;
 using SessionStories.Core.Stt;
 using SessionStories.Core.Tts;
 using SessionStories.Core.Universes;
+using SessionStories.Core.Voices;
 using SessionStories.Providers.Claude;
 using SessionStories.Providers.Store;
 using SessionStories.Providers.Whisper;
@@ -31,6 +32,8 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 
 builder.Services.AddSingleton<IStoryStore>(_ => new FileStoryStore(Path.Combine(options.LibraryRoot, "stories")));
 builder.Services.AddSingleton<IUniverseStore>(_ => new FileUniverseStore(Path.Combine(options.LibraryRoot, "universes")));
+// Voices are global — an engine concern, shared by every universe (library/voices.json).
+builder.Services.AddSingleton<IVoiceStore>(_ => new FileVoiceStore(options.LibraryRoot, options.Tts.VoiceCacheDir));
 builder.Services.AddSingleton<IStoryGenerator>(_ => new ClaudeCliGenerator(new ClaudeCliOptions
 {
     ExecutablePath = options.Claude.ExecutablePath,
@@ -44,20 +47,30 @@ builder.Services.AddSingleton<Func<ISttProvider>>(_ => () => new WhisperNetSttPr
 {
     ModelPath = options.Whisper.ModelPath,
 }));
-// TTS providers, keyed by id; voices.json "provider" picks one per voice (JobRunnerService).
+// TTS providers, keyed by id; the catalog's "provider" picks one per voice (JobRunnerService).
+var chatterboxOptions = new ChatterboxOptions
+{
+    ModelDir = options.Tts.ModelDir,
+    VoiceCacheDir = options.Tts.VoiceCacheDir,
+};
+var piperOptions = new PiperOptions
+{
+    ModelsRoot = options.Piper.ModelsRoot,
+    VoiceModels = options.Piper.VoiceModels,
+};
 builder.Services.AddSingleton<IReadOnlyDictionary<string, Func<ITtsProvider>>>(_ =>
     new Dictionary<string, Func<ITtsProvider>>
     {
-        ["chatterbox-onnx"] = () => new ChatterboxOnnxProvider(new ChatterboxOptions
-        {
-            ModelDir = options.Tts.ModelDir,
-            VoiceCacheDir = options.Tts.VoiceCacheDir,
-        }),
-        ["piper-onnx"] = () => new PiperOnnxProvider(new PiperOptions
-        {
-            ModelsRoot = options.Piper.ModelsRoot,
-            VoiceModels = options.Piper.VoiceModels,
-        }),
+        ["chatterbox-onnx"] = () => new ChatterboxOnnxProvider(chatterboxOptions),
+        ["piper-onnx"] = () => new PiperOnnxProvider(piperOptions),
+    });
+// Capability metadata, keyed the same way but resolved from statics: a read-only endpoint such
+// as GET /api/voices must never construct a provider (that path ends in ONNX sessions in VRAM).
+builder.Services.AddSingleton<IReadOnlyDictionary<string, TtsCapabilities>>(_ =>
+    new Dictionary<string, TtsCapabilities>
+    {
+        ["chatterbox-onnx"] = ChatterboxOnnxProvider.DescribeCapabilities(chatterboxOptions),
+        ["piper-onnx"] = PiperOnnxProvider.DescribeCapabilities(piperOptions),
     });
 
 builder.Services.AddSingleton<JobRegistry>();
@@ -99,7 +112,16 @@ api.MapGet("/universes/{uid}/files/{*name}", (string uid, string name, IUniverse
 {
     if (!IsSafeRelativePath(name))
         return Problem(400, "Invalid file name");
-    var file = universes.ReadFile(uid, name);
+    FileContent? file;
+    try
+    {
+        file = universes.ReadFile(uid, name);
+    }
+    catch (ArgumentException ex)
+    {
+        // Outside the universe whitelist — e.g. voices.json, which is global now (see /api/voices).
+        return Problem(400, ex.Message);
+    }
     if (file is null)
         return Problem(404, $"File '{name}' not found in universe '{uid}'");
     response.Headers.ETag = QuoteETag(file.ETag);
@@ -122,6 +144,10 @@ api.MapPut("/universes/{uid}/files/{*name}", async (string uid, string name, Htt
     {
         return ETagConflict(response, ex, ContentTypeForText(name));
     }
+    catch (ArgumentException ex)
+    {
+        return Problem(400, ex.Message);
+    }
     if (universes.ReadFile(uid, name) is { } current)
         response.Headers.ETag = QuoteETag(current.ETag);
     return Results.NoContent();
@@ -142,6 +168,158 @@ api.MapGet("/universes/{uid}/pending-facts", (string uid, IStoryStore stories) =
                     sceneId = fact.SceneId,
                 });
     return Results.Ok(facts);
+});
+
+// ---------------------------------------------------------------------------
+// Voices — global (machine/engine concern), not scoped to a universe
+// ---------------------------------------------------------------------------
+
+api.MapGet("/voices", (IVoiceStore voices, IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
+{
+    var catalog = voices.ReadCatalog();
+    if (catalog is null)
+        return Results.Ok(Array.Empty<object>());
+    return Results.Ok(catalog.Voices.Select(entry =>
+        VoiceView(voices, ttsCapabilities, catalog, entry.Key, entry.Value)));
+});
+
+// The "engine" select in the Add-voice dialog: whatever this build has registered. Cloning
+// support rides along so the dialog can hide the reference-wav field for fixed-voice engines.
+api.MapGet("/voices/providers", (IReadOnlyDictionary<string, Func<ITtsProvider>> ttsFactories,
+    IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
+    Results.Ok(ttsFactories.Keys.OrderBy(key => key, StringComparer.Ordinal).Select(key => new
+    {
+        id = key,
+        supportsCloning = ttsCapabilities.GetValueOrDefault(key)?.SupportsVoiceCloning ?? false,
+    })));
+
+api.MapPost("/voices", (CreateVoiceRequest request, IVoiceStore voices,
+    IReadOnlyDictionary<string, Func<ITtsProvider>> ttsFactories,
+    IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
+{
+    if (!IsValidVoiceId(request.Id))
+        return Problem(400, "Invalid voice id");
+    if (!ttsFactories.ContainsKey(request.Provider ?? ""))
+        return Problem(400, $"Unknown provider '{request.Provider}'. Registered: {string.Join(", ", ttsFactories.Keys)}");
+    var languages = CleanLanguages(request.Languages);
+    if (languages.Count == 0)
+        return Problem(400, "At least one language is required");
+
+    var created = voices.WriteVoice(request.Id!,
+        new VoiceEntryEdit(request.Provider, languages, request.Exaggeration, request.Cfg));
+    var view = ReadVoiceView(voices, ttsCapabilities, request.Id!);
+    return created ? Results.Created($"/api/voices/{request.Id}", view) : Results.Ok(view);
+});
+
+api.MapPatch("/voices/{id}", (string id, PatchVoiceRequest request, IVoiceStore voices,
+    IReadOnlyDictionary<string, Func<ITtsProvider>> ttsFactories,
+    IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
+{
+    if (!IsValidVoiceId(id))
+        return Problem(400, "Invalid voice id");
+    if (request.Provider is { } provider && !ttsFactories.ContainsKey(provider))
+        return Problem(400, $"Unknown provider '{provider}'. Registered: {string.Join(", ", ttsFactories.Keys)}");
+    List<string>? languages = null;
+    if (request.Languages is not null)
+    {
+        languages = CleanLanguages(request.Languages);
+        if (languages.Count == 0)
+            return Problem(400, "At least one language is required");
+    }
+
+    return voices.PatchVoice(id, new VoiceEntryEdit(request.Provider, languages, request.Exaggeration, request.Cfg))
+        ? Results.Ok(ReadVoiceView(voices, ttsCapabilities, id))
+        : Problem(404, $"Voice '{id}' is not in the catalog");
+});
+
+// The reference wav may be shared by several entries, so it survives unless ?deleteWav=true.
+api.MapDelete("/voices/{id}", (string id, bool? deleteWav, IVoiceStore voices) =>
+{
+    if (!IsValidVoiceId(id))
+        return Problem(400, "Invalid voice id");
+    return voices.DeleteVoice(id, deleteWav == true)
+        ? Results.NoContent()
+        : Problem(404, $"Voice '{id}' is not in the catalog");
+});
+
+api.MapPut("/voices/default", (SetDefaultVoiceRequest request, IVoiceStore voices) =>
+{
+    if (!IsValidVoiceId(request.Id))
+        return Problem(400, "Invalid voice id");
+    return voices.SetDefaultVoice(request.Id!)
+        ? Results.NoContent()
+        : Problem(404, $"Voice '{request.Id}' is not in the catalog");
+});
+
+// New reference recording ⇒ the preview and the conditionals cache are stale (the cache
+// deliberately never re-reads its source wav); IVoiceStore drops both.
+api.MapPost("/voices/{id}/reference", async (string id, IFormFile file, IVoiceStore voices,
+    IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
+{
+    if (!IsValidVoiceId(id))
+        return Problem(400, "Invalid voice id");
+    if (!Path.GetExtension(file.FileName).Equals(".wav", StringComparison.OrdinalIgnoreCase))
+        return Problem(400, "Reference recordings must be .wav files");
+    await using var stream = file.OpenReadStream();
+    return voices.SaveReferenceWav(id, stream)
+        ? Results.Ok(ReadVoiceView(voices, ttsCapabilities, id))
+        : Problem(404, $"Voice '{id}' is not in the catalog");
+}).DisableAntiforgery();
+
+api.MapGet("/voices/catalog", (IVoiceStore voices, HttpResponse response) =>
+{
+    var file = voices.ReadCatalogFile();
+    if (file is null)
+        return Problem(404, "voices.json not found in the library root");
+    response.Headers.ETag = QuoteETag(file.ETag);
+    return Results.Text(file.Text, "application/json");
+});
+
+api.MapPut("/voices/catalog", async (HttpRequest request, HttpResponse response, IVoiceStore voices) =>
+{
+    var etag = ReadIfMatch(request);
+    if (etag is null)
+        return Problem(428, "If-Match header is required for PUT");
+    var text = await new StreamReader(request.Body).ReadToEndAsync();
+    try
+    {
+        voices.WriteCatalogFile(text, etag);
+    }
+    catch (ETagMismatchException ex)
+    {
+        return ETagConflict(response, ex, "application/json");
+    }
+    if (voices.ReadCatalogFile() is { } current)
+        response.Headers.ETag = QuoteETag(current.ETag);
+    return Results.NoContent();
+});
+
+api.MapPost("/voices/{id}/preview", (string id, IVoiceStore voices, JobRegistry registry) =>
+{
+    if (!IsSafeFileName(id))
+        return Problem(400, "Invalid voice id");
+    if (voices.ReadCatalog()?.Voices.ContainsKey(id) != true)
+        return Problem(404, $"Voice '{id}' is not in the catalog");
+    var job = registry.Enqueue(new JobRecord
+    {
+        Id = NewJobId(),
+        Type = JobType.PreviewVoice,
+        StoryId = "",
+        Variant = "",
+        VoiceId = id,
+    });
+    return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id });
+});
+
+api.MapGet("/voices/{id}/preview", (string id, IVoiceStore voices) =>
+{
+    if (!IsSafeFileName(id))
+        return Problem(400, "Invalid voice id");
+    var path = voices.PreviewPath(id);
+    if (!File.Exists(path))
+        return Problem(404, $"No rendered preview for voice '{id}'");
+    // enableRangeProcessing: phone seek depends on it.
+    return Results.File(path, "audio/mpeg", enableRangeProcessing: true);
 });
 
 // ---------------------------------------------------------------------------
@@ -394,6 +572,28 @@ api.MapGet("/stories/{sid}/audio/{variant}", (string sid, string variant, IStory
     return Results.File(path, "audio/mpeg", enableRangeProcessing: true);
 });
 
+// TEMP: audio auditioning shelf (library/samples) for TTS engine/voice comparisons.
+// Remove together with app/src/routes/Samples.tsx when the Polish TTS quest concludes.
+var samplesDir = Path.Combine(options.LibraryRoot, "samples");
+
+api.MapGet("/samples", () =>
+    Results.Ok(Directory.Exists(samplesDir)
+        ? Directory.GetFiles(samplesDir)
+            .Where(f => Path.GetExtension(f).ToLowerInvariant() is ".mp3" or ".wav" or ".m4a")
+            .OrderBy(f => f)
+            .Select(f => new { file = Path.GetFileName(f), sizeKb = new FileInfo(f).Length / 1024 })
+        : []));
+
+api.MapGet("/samples/{file}", (string file) =>
+{
+    if (!IsSafeFileName(Path.GetFileNameWithoutExtension(file)))
+        return Problem(400, "Invalid file name");
+    var path = Path.Combine(samplesDir, file);
+    if (!File.Exists(path))
+        return Problem(404, $"Sample '{file}' not found");
+    return Results.File(path, ContentTypeForFile(file), enableRangeProcessing: true);
+});
+
 // ---------------------------------------------------------------------------
 // Jobs
 // ---------------------------------------------------------------------------
@@ -413,6 +613,9 @@ api.MapPost("/stories/{sid}/jobs", (string sid, CreateJobRequest request, IStory
             break;
         case JobType.RegenScene when string.IsNullOrWhiteSpace(request.SceneId):
             return Problem(400, "RegenScene jobs require 'sceneId'");
+        case JobType.PreviewVoice:
+            // Previews belong to a voice, not a story — POST /api/voices/{id}/preview.
+            return Problem(400, "PreviewVoice jobs are enqueued at POST /api/voices/{id}/preview");
     }
     if (request.Type != JobType.Transcribe && string.IsNullOrWhiteSpace(request.Variant))
         return Problem(400, $"{request.Type} jobs require 'variant'");
@@ -426,6 +629,7 @@ api.MapPost("/stories/{sid}/jobs", (string sid, CreateJobRequest request, IStory
         SceneId = request.SceneId,
         FeedbackNote = request.FeedbackNote,
         File = request.File,
+        VoiceId = request.VoiceId,
     });
     return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id });
 });
@@ -450,6 +654,7 @@ api.MapGet("/jobs/{id}", (string id, JobRegistry registry) =>
         job.Variant,
         job.SceneId,
         job.File,
+        job.VoiceId,
         job.CreatedUtc,
         job.StartedUtc,
         job.FinishedUtc,
@@ -520,6 +725,36 @@ static bool IsSafeRelativePath(string name)
 static bool IsSafeFileName(string name)
     => !string.IsNullOrWhiteSpace(name) && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
        && !name.Contains("..") && name != ".";
+
+/// <summary>Safe file name, and not one of the literal segments that live beside /api/voices/{id}.</summary>
+static bool IsValidVoiceId(string? id)
+    => id is not null && IsSafeFileName(id) && !Program.ReservedVoiceIds.Contains(id);
+
+static List<string> CleanLanguages(IEnumerable<string>? languages)
+    => [.. (languages ?? []).Select(l => l.Trim()).Where(l => l.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)];
+
+/// <summary>Re-reads one catalog entry in the GET /api/voices shape; null when the id is gone.</summary>
+static object? ReadVoiceView(IVoiceStore voices, IReadOnlyDictionary<string, TtsCapabilities> capabilities, string id)
+{
+    var catalog = voices.ReadCatalog();
+    var entry = catalog?.Voices.GetValueOrDefault(id);
+    return entry is null ? null : VoiceView(voices, capabilities, catalog!, id, entry);
+}
+
+static object VoiceView(IVoiceStore voices, IReadOnlyDictionary<string, TtsCapabilities> capabilities,
+    VoiceCatalog catalog, string id, VoiceEntry entry) => new
+{
+    id,
+    provider = entry.Provider,
+    languages = entry.Languages,
+    referenceWav = entry.ReferenceWav,
+    knobs = new { exaggeration = entry.Exaggeration, cfg = entry.Cfg },
+    hasReferenceWav = voices.ResolveReferenceWav(id) is not null,
+    hasPreview = File.Exists(voices.PreviewPath(id)),
+    isDefault = string.Equals(id, catalog.Default, StringComparison.Ordinal),
+    // A property of the engine, not of whether a wav happens to be listed; unknown engine ⇒ false.
+    supportsCloning = capabilities.GetValueOrDefault(entry.Provider)?.SupportsVoiceCloning ?? false,
+};
 
 static string ContentTypeForText(string name)
     => name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
@@ -630,9 +865,15 @@ static string? ProbeGpu()
 
 sealed record CreateStoryRequest(string Slug, string Universe, string Variant, string Title, string? Language);
 
-sealed record CreateJobRequest(JobType Type, string? Variant, string? SceneId, string? FeedbackNote, string? File);
+sealed record CreateJobRequest(JobType Type, string? Variant, string? SceneId, string? FeedbackNote, string? File, string? VoiceId);
 
 sealed record ApproveFactsRequest(string[] AcceptedLineIds);
+
+sealed record CreateVoiceRequest(string? Id, string? Provider, string[]? Languages, double? Exaggeration, double? Cfg);
+
+sealed record PatchVoiceRequest(string? Provider, string[]? Languages, double? Exaggeration, double? Cfg);
+
+sealed record SetDefaultVoiceRequest(string? Id);
 
 sealed record VerifyItem(string Scope, string Rule, string Detail);
 
@@ -641,6 +882,12 @@ partial class Program
     internal static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".m4a", ".mp3", ".wav", ".ogg", ".opus", ".webm", ".aac", ".flac", ".wma",
+    };
+
+    /// <summary>Literal segments under /api/voices — a voice may not be named after one of them.</summary>
+    internal static readonly HashSet<string> ReservedVoiceIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "catalog", "providers", "default",
     };
 
     private static object JobSummary(JobRecord job) => new
@@ -652,6 +899,7 @@ partial class Program
         job.StoryId,
         job.Variant,
         job.SceneId,
+        job.VoiceId,
         job.CreatedUtc,
         job.StartedUtc,
         job.FinishedUtc,

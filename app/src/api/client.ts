@@ -7,7 +7,9 @@
 // - Other errors are RFC 7807 ProblemDetails.
 // - Dev: Vite proxies /api → http://localhost:5211; prod: same origin.
 
-import { strings } from '../strings';
+// Hooks are unavailable here, so error copy comes from the module-level
+// accessor, resolved at throw time (never cached at module load).
+import { getStrings } from '../i18n';
 
 export class ApiError extends Error {
   status: number;
@@ -24,7 +26,7 @@ export class ConflictError extends ApiError {
   currentETag: string;
 
   constructor(currentText: string, currentETag: string) {
-    super(409, strings.errorFileChangedOnDisk);
+    super(409, getStrings().errorFileChangedOnDisk);
     this.name = 'ConflictError';
     this.currentText = currentText;
     this.currentETag = currentETag;
@@ -86,6 +88,26 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/** PUT/PATCH with a JSON body — for resources that are not ETag-guarded text files. */
+async function sendJson<T>(method: 'PUT' | 'PATCH', path: string, body: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method,
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) await throwApiError(response);
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+export function putJson<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>('PUT', path, body);
+}
+
+export function patchJson<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>('PATCH', path, body);
+}
+
 export async function del(path: string): Promise<void> {
   const response = await fetch(path, { method: 'DELETE' });
   if (!response.ok) await throwApiError(response);
@@ -102,12 +124,13 @@ export async function getWithETag(path: string): Promise<{ text: string; etag: s
 }
 
 /**
- * Content-Type per backend expectation: session routes and *.json universe
- * files carry raw JSON; draft scenes and markdown universe files carry text.
- * (The server reads the raw body either way — this keeps semantics honest.)
+ * Content-Type per backend expectation: session routes, the global voice
+ * catalog and *.json universe files carry raw JSON; draft scenes and markdown
+ * universe files carry text. (The server reads the raw body either way — this
+ * keeps semantics honest.)
  */
 function contentTypeForPut(path: string): string {
-  return path.includes('/session/') || path.endsWith('.json')
+  return path.includes('/session/') || path.endsWith('.json') || path === '/api/voices/catalog'
     ? 'application/json'
     : 'text/markdown; charset=utf-8';
 }
@@ -132,7 +155,7 @@ export async function putWithETag(
 }
 
 // ---------------------------------------------------------------------------
-// Recollection upload (multipart, with progress for phone capture)
+// Multipart uploads (with progress — phone capture, voice reference wavs)
 // ---------------------------------------------------------------------------
 
 export function uploadRecollection(
@@ -141,11 +164,25 @@ export function uploadRecollection(
   file: File,
   onProgress: (pct: number) => void,
 ): Promise<void> {
+  return uploadFile(
+    `/api/stories/${encodeURIComponent(storyId)}/recollections?person=${encodeURIComponent(person)}`,
+    file,
+    onProgress,
+  );
+}
+
+/** POST library/voices/<id>.wav; the server also drops the stale preview + conditionals cache. */
+export function uploadVoiceReference(
+  voiceId: string,
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  return uploadFile(`/api/voices/${encodeURIComponent(voiceId)}/reference`, file, onProgress);
+}
+
+function uploadFile(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const url =
-      `/api/stories/${encodeURIComponent(storyId)}/recollections` +
-      `?person=${encodeURIComponent(person)}`;
     xhr.open('POST', url);
     xhr.responseType = 'text';
 
@@ -168,8 +205,8 @@ export function uploadRecollection(
       }
       reject(new ApiError(xhr.status, message));
     };
-    xhr.onerror = () => reject(new ApiError(0, strings.uploadNetworkError));
-    xhr.onabort = () => reject(new ApiError(0, strings.uploadAborted));
+    xhr.onerror = () => reject(new ApiError(0, getStrings().uploadNetworkError));
+    xhr.onabort = () => reject(new ApiError(0, getStrings().uploadAborted));
 
     const form = new FormData();
     // Field name must be "file" — it binds to the IFormFile parameter.
@@ -188,4 +225,9 @@ export function audioUrl(storyId: string, variant: string): string {
 
 export function recollectionUrl(storyId: string, file: string): string {
   return `/api/stories/${encodeURIComponent(storyId)}/recollections/${encodeURIComponent(file)}`;
+}
+
+/** Rendered voice preview (library/voice-previews/<id>.mp3); 404 until a preview job ran. */
+export function voicePreviewUrl(voiceId: string): string {
+  return `/api/voices/${encodeURIComponent(voiceId)}/preview`;
 }

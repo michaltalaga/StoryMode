@@ -26,16 +26,23 @@ public sealed class ChatterboxOnnxProvider : ITtsProvider, IDisposable
     {
         _options = options;
         _voiceCache = new VoiceConditionalsCache(options.VoiceCacheDir);
-        Capabilities = new TtsCapabilities(
-            SupportedLanguages,
-            [
-                new TtsKnob("exaggeration", 0, 1, _options.Exaggeration),
-                new TtsKnob("cfg", 0, 1, _options.CfgWeight),
-                new TtsKnob("temperature", 0, 2, _options.Temperature),
-            ],
-            OutputSampleRate: 44100,
-            AppliesWatermark: false);
+        Capabilities = DescribeCapabilities(options);
     }
+
+    /// <summary>
+    /// Capabilities without an instance — callers that only need the metadata (e.g. GET /api/voices)
+    /// must not construct a provider, because that would eventually load ONNX sessions into VRAM.
+    /// </summary>
+    public static TtsCapabilities DescribeCapabilities(ChatterboxOptions options) => new(
+        SupportedLanguages,
+        [
+            new TtsKnob("exaggeration", 0, 1, options.Exaggeration),
+            new TtsKnob("cfg", 0, 1, options.CfgWeight),
+            new TtsKnob("temperature", 0, 2, options.Temperature),
+        ],
+        OutputSampleRate: 44100,
+        AppliesWatermark: false,
+        SupportsVoiceCloning: true);
 
     public string Id => "chatterbox-onnx";
 

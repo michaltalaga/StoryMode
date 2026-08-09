@@ -7,7 +7,8 @@ invocation shape. If code or plan disagrees with this page, this page wins; chan
 
 - API + SPA: `http://0.0.0.0:5211` (Kestrel, LAN; firewall Private profile; no auth v1 — all routes under `/api` = future auth seam).
 - Vite dev proxy: `/api → http://localhost:5211`.
-- `LibraryRoot` default: `<repo>/library` (contains `stories/`, `universes/`, `voice-cache/`). Overridable in `appsettings.json`.
+- `LibraryRoot` default: `<repo>/library` (contains `stories/`, `universes/`, `voices.json`, `voices/`, `voice-cache/`, `voice-previews/`). Overridable in `appsettings.json`.
+- **Voices are global**, not per universe: the catalog is `library/voices.json`, its `referenceWav` values are bare file names under `library/voices/`, and rendered previews land in `library/voice-previews/<voiceId>.mp3`. Wavs, previews and the conditionals cache are gitignored; the catalog JSON is committed.
 - Models: `<repo>/models` (`chatterbox/`, `whisper/`, `piper/`). Downloaded by `scripts/download-models.ps1`, never committed.
 - Skill: `<repo>/skills/story/` (committed content).
 
@@ -25,8 +26,27 @@ invocation shape. If code or plan disagrees with this page, this page wins; chan
 | Route | Notes |
 |---|---|
 | `GET /api/universes` | list ids + titles |
-| `GET/PUT /api/universes/{uid}/files/{name}` | `constraints.md`, `bible.md`, `characters.md`, `voices.json`, `tones/{tone}.md` (name may contain one `/` for tones) |
+| `GET/PUT /api/universes/{uid}/files/{name}` | `constraints.md`, `bible.md`, `characters.md`, `tones/{tone}.md` (name may contain one `/` for tones) |
 | `GET /api/universes/{uid}/pending-facts` | aggregated `bible.pending.*.md` across that universe's stories → `[{storyId, variant, lineId, text, sceneId}]` |
+
+### Voices
+Global — a machine/engine concern, shared by every universe.
+
+| Route | Notes |
+|---|---|
+| `GET /api/voices` | `[{id, provider, languages[], referenceWav, knobs: {exaggeration, cfg}, hasReferenceWav, hasPreview, isDefault}]` — `[]` when no catalog. `referenceWav` is the raw catalog value; `hasReferenceWav` says whether it exists under `library/voices/` |
+| `GET /api/voices/providers` | `["chatterbox-onnx", "piper-onnx"]` — the TTS provider ids this build registered; the only values `provider` may take |
+| `POST /api/voices` | `{id, provider, languages[], exaggeration?, cfg?}` → `201`/`200` with the `GET /api/voices` item. Creates or **replaces** the entry: the four fields are written (a null knob removes it) while `referenceWav` and any hand-written JSON on the entry survive. 400 on an unsafe/reserved id (`catalog`, `providers`, `default`), an unregistered provider, or empty `languages` |
+| `PATCH /api/voices/{id}` | same body minus `id`, all fields optional — only the ones present are written. `200` with the item, 404 when the id is not in the catalog |
+| `DELETE /api/voices/{id}?deleteWav=` | `204`. Removes the entry, its `library/voice-previews/<id>.mp3` and its `library/voice-cache/<id>` folder, and clears `default` when it pointed here. The reference wav may be shared, so it stays unless `deleteWav=true`. 404 when absent |
+| `PUT /api/voices/default` | `{id}` → `204`; 404 when the id is not in the catalog |
+| `POST /api/voices/{id}/reference` | multipart (`file`, `.wav` only) → saves `library/voices/<id>.wav`, points the entry at it and **drops the derived artifacts** (preview mp3 + conditionals cache, which never re-reads its source wav). `200` with the item; 400 on a non-wav, 404 when the id is not in the catalog |
+| `GET/PUT /api/voices/catalog` | raw `library/voices.json` text, ETag / If-Match like the universe files (428 without `If-Match`, 409 + current content on mismatch) |
+| `POST /api/voices/{id}/preview` | `202 {jobId}` — enqueues a `previewVoice` job; 404 when the id is not in the catalog |
+| `GET /api/voices/{id}/preview` | the rendered mp3, `enableRangeProcessing: true`; 404 until a preview job has run |
+
+Structured edits round-trip the catalog through `JsonNode`, so unknown fields (`_notes`, future knobs)
+survive; writes are atomic, same as every other store.
 
 ### Stories
 | Route | Notes |
@@ -55,8 +75,8 @@ regenerated implicitly — the user re-runs verification explicitly via the `ver
 ### Jobs
 | Route | Notes |
 |---|---|
-| `POST /api/stories/{sid}/jobs` | `{type: "transcribe"\|"generate"\|"regenScene"\|"verify"\|"renderTts", variant, sceneId?, feedbackNote?, file?}` → `202 {jobId}` |
-| `GET /api/jobs` | all recent jobs: state, stage, storyId, variant |
+| `POST /api/stories/{sid}/jobs` | `{type: "transcribe"\|"generate"\|"regenScene"\|"verify"\|"renderTts", variant, sceneId?, feedbackNote?, file?}` → `202 {jobId}`. `previewVoice` is rejected here — it belongs to a voice, not a story (see Voices) |
+| `GET /api/jobs` | all recent jobs: state, stage, storyId, variant, voiceId |
 | `GET /api/jobs/{id}` | + log tail (last ~100 lines), cost-so-far, elapsed |
 | `POST /api/jobs/{id}/cancel` | kills process tree / disposes model sessions |
 
@@ -65,8 +85,8 @@ appends in the story folder. SPA polls `GET /api/jobs` every 2 s while any job i
 GPU residency: model sessions are lazy-loaded per job and disposed at job end — Whisper (~3 GB)
 and Chatterbox (~2.5–3 GB) must never coexist in VRAM.
 
-**TTS providers**: `renderTts` supports multiple engines, selected per voice via the
-`provider` field in the universe's `voices.json` (`chatterbox-onnx` when absent). `piper-onnx`
+**TTS providers**: `renderTts` and `previewVoice` support multiple engines, selected per voice via
+the `provider` field in `library/voices.json` (`chatterbox-onnx` when absent). `piper-onnx`
 (Piper VITS via sherpa-onnx, CPU) serves fixed trained voices — no cloning, no reference wav,
 single `speed` knob — with native espeak-ng phonemization (used for Polish narration); voice id →
 model bundle mapping lives in `appsettings.json` under `SessionStories:Piper:VoiceModels`.
@@ -94,3 +114,4 @@ model bundle mapping lives in `appsettings.json` under `SessionStories:Piper:Voi
 | `regenScene` | regen sN (fresh session) | scratch → splice; previous block saved to `draft.<v>.sN.prev.md`; clears the scene's `verify.<v>.md` section |
 | `verify` | verify | `verify.<v>.md` |
 | `renderTts` | — (TTS provider per voice: Chatterbox ONNX or Piper/sherpa-onnx) | `audio/<v>.mp3` |
+| `previewVoice` | — (same providers; fixed sample sentence chosen by the voice's primary language, en/pl) | `library/voice-previews/<voiceId>.mp3` |

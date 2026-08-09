@@ -1,23 +1,29 @@
 import { Link, NavLink, Route, Routes, useNavigate } from 'react-router'
 import { useJobs } from './api/queries'
+import type { Strings } from './i18n'
+import { useStrings } from './i18n'
 import PlayerBar from './player/PlayerBar'
-import { strings as t } from './strings'
 import Capture from './routes/Capture'
 import DraftReview from './routes/DraftReview'
 import Listen from './routes/Listen'
 import Progress from './routes/Progress'
 import SessionBuilder from './routes/SessionBuilder'
 import Settings from './routes/Settings'
+// TYMCZASOWE — patrz Samples.tsx
+import Samples from './routes/Samples'
 import StoryDetail from './routes/StoryDetail'
 import StoryList from './routes/StoryList'
 import Universe from './routes/Universe'
 
-const jobTypeLabels: Record<string, string> = {
-  transcribe: t.jobTypeTranscribe,
-  generate: t.jobTypeGenerate,
-  regenScene: t.jobTypeRegenScene,
-  verify: t.jobTypeVerify,
-  renderTts: t.jobTypeRenderTts,
+function jobTypeLabels(t: Strings): Record<string, string> {
+  return {
+    transcribe: t.jobTypeTranscribe,
+    generate: t.jobTypeGenerate,
+    regenScene: t.jobTypeRegenScene,
+    verify: t.jobTypeVerify,
+    renderTts: t.jobTypeRenderTts,
+    previewVoice: t.jobTypePreviewVoice,
+  }
 }
 
 /**
@@ -25,6 +31,7 @@ const jobTypeLabels: Record<string, string> = {
  * spinning dot and stage text; tapping it opens that job's progress page.
  */
 function RunningJobChip() {
+  const t = useStrings()
   const navigate = useNavigate()
   const { data: jobs } = useJobs()
   const active =
@@ -35,7 +42,7 @@ function RunningJobChip() {
   const label =
     active.state === 'queued'
       ? t.jobQueued
-      : active.stage || jobTypeLabels[active.type] || active.type
+      : active.stage || jobTypeLabels(t)[active.type] || active.type
   const target = active.variant
     ? `/stories/${active.storyId}/v/${active.variant}/progress`
     : `/stories/${active.storyId}`
@@ -129,6 +136,8 @@ function tabLinkClass({ isActive }: { isActive: boolean }) {
 }
 
 export default function App() {
+  const t = useStrings()
+
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-50/90 backdrop-blur">
@@ -173,6 +182,7 @@ export default function App() {
           <Route path="/listen" element={<Listen />} />
           <Route path="/universes/:id" element={<Universe />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/samples" element={<Samples />} />
         </Routes>
       </main>
 

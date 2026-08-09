@@ -1,16 +1,25 @@
 /**
- * Cały tekst interfejsu w jednym płaskim obiekcie (właściciel: agent 1).
- * Inne moduły importują `strings` i używają kluczy; brakujące klucze
- * dopisujemy tutaj przy integracji.
+ * Polish UI copy. Values moved over verbatim from the former src/strings.ts.
+ *
+ * Typed as `Strings` (= `typeof en`), so a missing or misspelled key here is a
+ * compile error. Keep the key order in step with en.ts.
  */
-export const strings = {
-  // --- Aplikacja / nawigacja ---
-  appName: 'Opowieści',
+import type { Strings } from './en'
+
+export const pl: Strings = {
+  // --- App / navigation ---
+  /** Product name — deliberately identical in both dictionaries (and in index.html). */
+  appName: 'Story Mode',
+  /** Browser tab title; index.html ships the same name until React boots. */
+  appTitle: 'Story Mode',
   navHome: 'Historie',
   navListen: 'Słuchaj',
   navSettings: 'Ustawienia',
 
-  // --- Ogólne ---
+  /** BCP-47 tag for Intl formatting (dates, currency). */
+  locale: 'pl-PL',
+
+  // --- General ---
   save: 'Zapisz',
   cancel: 'Anuluj',
   delete: 'Usuń',
@@ -30,7 +39,7 @@ export const strings = {
   retry: 'Spróbuj ponownie',
   optional: '(opcjonalnie)',
 
-  // --- Lista historii ---
+  // --- Story list ---
   storiesTitle: 'Historie',
   storiesEmpty: 'Nie ma jeszcze żadnych historii. Stwórzcie pierwszą!',
   newStory: 'Nowa historia',
@@ -51,11 +60,10 @@ export const strings = {
   newStoryLanguageLabel: 'Język',
   newStoryCreated: 'Historia utworzona',
 
-  // --- Szczegóły historii ---
+  // --- Story detail ---
   storyDetailTitle: 'Historia',
   recollectionsTitle: 'Wspomnienia',
-  recollectionsEmpty:
-    'Nie ma jeszcze wspomnień. Nagrajcie, co pamiętacie z sesji.',
+  recollectionsEmpty: 'Nie ma jeszcze wspomnień. Nagrajcie, co pamiętacie z sesji.',
   recollectionsShared: 'Wspomnienia są wspólne dla wszystkich wersji.',
   addRecollection: 'Dodaj wspomnienie',
   variantLabel: 'Wersja',
@@ -77,7 +85,7 @@ export const strings = {
   startRenderTts: 'Nagraj lektora',
   addVariant: 'Dodaj wersję',
 
-  // --- Nagrywanie wspomnień (Capture) ---
+  // --- Capture ---
   captureTitle: 'Opowiedz, co pamiętasz',
   captureHint:
     'Mów swobodnie, po swojemu. Nie musi być po kolei — najważniejsze jest to, co było najciekawsze.',
@@ -92,13 +100,12 @@ export const strings = {
   captureUploadDone: 'Wysłano! Nagranie zostanie spisane automatycznie.',
   captureTextMode: 'Wolisz napisać?',
   captureTextPlaceholder: 'Zapisz tu swoje wspomnienie…',
-  captureExists:
-    'Wspomnienie tej osoby już istnieje — wspomnień nie można nadpisywać.',
+  captureExists: 'Wspomnienie tej osoby już istnieje — wspomnień nie można nadpisywać.',
   captureMicDenied: 'Brak dostępu do mikrofonu. Sprawdź uprawnienia.',
   captureTranscribing: 'Spisywanie nagrania…',
   captureListenBack: 'Odsłuchaj przed wysłaniem',
 
-  // --- Budowa opowieści (SessionBuilder) ---
+  // --- Session builder ---
   builderTitle: 'Ustawienia opowieści',
   builderGivenLabel: 'TAK BYŁO',
   builderInventLabel: 'WYMYŚL',
@@ -122,11 +129,10 @@ export const strings = {
   builderPresetRpgSession: 'Sesja RPG — trochę było, trochę wymyśl',
   builderPresetPremise: 'Sam pomysł — wymyśl resztę',
   builderSaveAndGenerate: 'Zapisz i generuj',
-  builderRawJson: 'Edytuj JSON',
   builderConflict:
     'Plik założeń zmienił się w międzyczasie. Wczytaj aktualną wersję i nanieś zmiany jeszcze raz.',
 
-  // --- Postęp (Progress / zadania) ---
+  // --- Progress / jobs ---
   progressTitle: 'Postęp',
   jobsTitle: 'Zadania',
   jobsEmpty: 'Brak zadań',
@@ -145,10 +151,11 @@ export const strings = {
   jobTypeRegenScene: 'Nowa wersja sceny',
   jobTypeVerify: 'Sprawdzanie zgodności',
   jobTypeRenderTts: 'Nagrywanie lektora',
+  jobTypePreviewVoice: 'Próbka głosu',
   jobEnqueued: 'Dodano do kolejki',
   jobSerialNote: 'Zadania wykonują się po kolei, jedno naraz.',
 
-  // --- Wersja robocza (DraftReview) ---
+  // --- Draft review ---
   draftTitle: 'Wersja robocza',
   draftEmpty: 'Nie ma jeszcze tekstu. Najpierw wygeneruj historię.',
   sceneLabel: 'Scena',
@@ -168,10 +175,9 @@ export const strings = {
   draftConflictOverwrite: 'Nadpisz moją wersją',
   draftSaved: 'Zapisano scenę',
 
-  // --- Słuchanie / odtwarzacz ---
+  // --- Listening / player ---
   listenTitle: 'Słuchanie',
-  listenEmpty:
-    'Nie ma jeszcze żadnych nagrań. Wygeneruj historię i nagraj lektora.',
+  listenEmpty: 'Nie ma jeszcze żadnych nagrań. Wygeneruj historię i nagraj lektora.',
   playAll: 'Odtwórz wszystko',
   play: 'Odtwórz',
   pause: 'Pauza',
@@ -181,12 +187,11 @@ export const strings = {
   queueTitle: 'Kolejka',
   download: 'Pobierz',
 
-  // --- Świat (Universe) ---
+  // --- Universe ---
   universeTitle: 'Świat',
   tabConstraints: 'Zasady świata',
   tabBible: 'Kronika',
   tabCharacters: 'Postacie',
-  tabVoices: 'Głosy',
   tabTones: 'Tony',
   universeFileSaved: 'Zapisano plik',
   universeFileConflict:
@@ -199,8 +204,10 @@ export const strings = {
   factsApproved: 'Dodano do kroniki',
   factSource: 'Źródło',
 
-  // --- Ustawienia / stan systemu ---
+  // --- Settings / system status ---
   settingsTitle: 'Ustawienia',
+  /** Page subtitle: what this page actually holds. */
+  settingsSubtitle: 'Język, głosy i stan systemu',
   statusTitle: 'Stan systemu',
   statusClaude: 'Claude CLI',
   statusGpu: 'Karta graficzna',
@@ -212,8 +219,7 @@ export const strings = {
   statusMissing: 'Brak',
   statusVersion: 'Wersja',
 
-  // --- Uzupełnienia z integracji (dawne literały inline z modułów) ---
-  // Ogólne
+  // --- General (second pass: former inline literals) ---
   add: 'Dodaj',
   preview: 'Podgląd',
   refresh: 'Odśwież',
@@ -234,16 +240,16 @@ export const strings = {
   errorShort: 'błąd',
   titleLabel: 'Tytuł',
 
-  // Klient HTTP
+  // --- HTTP client ---
   errorFileChangedOnDisk: 'Plik zmienił się na dysku od czasu odczytu.',
   uploadNetworkError: 'Błąd sieci podczas wysyłania.',
   uploadAborted: 'Wysyłanie przerwane.',
 
-  // Słuchanie
+  // --- Listening ---
   downloadAll: 'Pobierz wszystkie',
   downloadingAll: 'Pobieranie…',
 
-  // Lista historii
+  // --- Story list ---
   newStoryDescription: 'Utworzy folder historii i pierwszą wersję.',
   newStoryValidationMissing: 'Podaj tytuł i nazwę wersji.',
   newStorySlugInvalid: 'Slug może zawierać tylko małe litery, cyfry i myślniki.',
@@ -252,7 +258,7 @@ export const strings = {
   storiesLoadError: 'Nie udało się pobrać historii.',
   storiesEmptyHint: 'Zacznij od „Nowa historia”, potem nagrajcie wspomnienia.',
 
-  // Szczegóły historii
+  // --- Story detail ---
   storyNotFound: 'Nie znaleziono historii.',
   variantNameInvalid: 'Nazwa wersji: małe litery, cyfry i myślniki.',
   variantExists: 'Taka wersja już istnieje.',
@@ -276,8 +282,10 @@ export const strings = {
   linkProgress: 'postęp',
   linkDraft: 'szkic',
   linkAudio: 'audio',
+  /** Chip on a variant card: "pracuje: <stage>". */
+  jobWorkingPrefix: 'pracuje',
 
-  // Nagrywanie wspomnień (Capture)
+  // --- Capture ---
   captureHeading: 'Wspomnienia z sesji',
   captureSharedHint: 'Wspólne dla wszystkich wersji. Nagrania audio transkrybują się same.',
   addFile: 'Dodaj plik',
@@ -293,7 +301,7 @@ export const strings = {
     'Transkrypcje celowo zostają nieuczesane — tak zapamiętało dziecko i tak ma zostać. Edytuj tylko, gdy Whisper przekręcił słowa.',
   editAnyway: 'Edytuj mimo to',
 
-  // Budowa opowieści (SessionBuilder)
+  // --- Session builder ---
   builderPresetGiven: 'Raport bitewny',
   builderPresetInvent: 'Pomysł',
   builderPresetGivenTitle: 'Zastosować szablon „Raport bitewny”?',
@@ -307,7 +315,7 @@ export const strings = {
   builderPovEmpty: 'Zaznacz postacie w obsadzie, aby wybrać POV.',
   builderOutcomeLabel: 'Finał',
   builderSkipRemove: 'Usuń z listy pominięć',
-  builderVoiceDefault: '(domyślny z uniwersum)',
+  builderVoiceDefault: '(domyślny z katalogu)',
   builderMoveUp: 'Przenieś wyżej',
   builderMoveDown: 'Przenieś niżej',
   builderGenerateHint: 'Zapisz zmiany przed generowaniem',
@@ -319,20 +327,26 @@ export const strings = {
   builderLoadError: 'Nie udało się wczytać sesji',
   builderSessionBroken: 'Plik sesji nie jest poprawnym obiektem JSON.',
 
-  // Postęp (Progress)
+  // --- Progress ---
   progressLoadingJobs: 'Wczytywanie zadań…',
   progressNoJobs: 'Brak zadań dla tego wariantu.',
   jobsLoadError: 'Nie udało się pobrać listy zadań.',
   jobQueuedNote: 'Zadanie czeka w kolejce — zadania wykonują się pojedynczo.',
   jobCancelConfirm: 'Na pewno przerwać to zadanie?',
+  jobCancelAction: 'Przerwij zadanie',
   jobFailedNote: 'Zadanie zakończyło się błędem.',
   stageExtract: 'Ekstrakcja faktów',
   stageOutlineStep: 'Szkielet scen',
   stageScenes: 'Sceny',
   stageVerify: 'Weryfikacja',
   stageBible: 'Fakty do biblii',
+  /** Scene counter under the "Sceny" step; {n} and {total} are substituted. */
+  stageSceneOf: 'scena {n} z {total}',
+  openBuilder: 'Otwórz kreator',
+  viewDraft: 'Zobacz szkic',
+  reviewDraft: 'Przejrzyj szkic',
 
-  // Wersja robocza (DraftReview)
+  // --- Draft review ---
   draftReviewTitle: 'Przegląd szkicu',
   draftLoading: 'Wczytywanie szkicu…',
   draftEmptyForVariant: 'Nie ma jeszcze szkicu dla tego wariantu.',
@@ -347,8 +361,18 @@ export const strings = {
   verifyRunning: 'Weryfikacja…',
   sceneRegenOwnNotesLabel: 'Własne uwagi (opcjonalnie)',
   sceneRegenNothingSelectedHint: 'Zaznacz uwagi albo napisz własne',
+  regenerate: 'Regeneruj',
+  sceneRestoreShort: 'Przywróć poprzednią',
+  discardChanges: 'Odrzuć zmiany',
+  renderAudio: 'Renderuj audio',
+  conflictLoadFromDisk: 'Wczytaj wersję z dysku',
+  conflictKeepMine: 'Zachowaj moją i zapisz ponownie',
+  /** Heading of the note handed to the generator when regenerating a scene. */
+  feedbackNoteHeader: 'Zastosuj następujące uwagi weryfikacji:',
+  /** Label before the free-text part of that note. */
+  feedbackNoteExtra: 'Dodatkowo',
 
-  // Uwagi weryfikacji — etykiety kategorii (slug reguły → język ludzki)
+  // --- Verification notes: rule labels (rule slug → plain language) ---
   verifyRuleGivenDrift: 'Zmienione fakty — tak nie było',
   verifyRuleRegister: 'Styl narracji',
   verifyRuleAnachronism: 'Anachronizm',
@@ -360,18 +384,14 @@ export const strings = {
   draftConflictDiskBody:
     'plik szkicu został w międzyczasie zmieniony (np. przez regenerację albo ręczną edycję). Co zrobić z Twoją wersją?',
 
-  // Świat (Universe)
+  // --- Universe ---
   universeConflictTitle: 'Plik zmienił się na dysku',
   fontToggleAria: 'Krój pisma',
   fontSerif: 'Szeryf',
   fontMono: 'Mono',
   tabFacts: 'Fakty',
-  voicesShowCards: 'Pokaż karty',
-  voicesInvalidJson: 'Nieprawidłowy JSON — plik i tak można zapisać',
-  voicesParseError: 'Nie udało się odczytać voices.json — użyj edytora JSON',
-  voicesEmpty: 'Brak zdefiniowanych głosów',
 
-  // Ustawienia
+  // --- Settings ---
   settingsClaudeMissingTitle: 'Brak Claude CLI',
   settingsClaudeMissingBody1: 'Nie znaleziono polecenia',
   settingsClaudeMissingBody2:
@@ -383,6 +403,95 @@ export const strings = {
   settingsGeneratorHeading: 'Generator',
   settingsLibraryHeading: 'Biblioteka',
   settingsBypassTitle: 'Panel można pominąć',
-} as const
+  /** Annotated library tree; rendered under the library root path. */
+  settingsLibraryTree: `├─ stories/
+│  └─ <data-slug historii>/
+│     ├─ session.<wariant>.json   ← spec: obsada, beaty, given|invent
+│     ├─ recollections/           ← nagrania i notatki (niezmienne)
+│     ├─ outline.<wariant>.md
+│     ├─ draft.<wariant>.md       ← tekst opowieści
+│     ├─ verify.<wariant>.md
+│     └─ audio/<wariant>.mp3
+├─ universes/
+│  └─ <uniwersum>/
+│     ├─ constraints.md           ← zasady świata
+│     ├─ bible.md                 ← fakty kanoniczne (kronika)
+│     └─ characters.md
+├─ voices.json                    ← katalog głosów (wspólny dla wszystkich światów)
+├─ voices/                        ← nagrania wzorcowe
+└─ voice-previews/                ← wyrenderowane próbki głosów`,
 
-export type StringKey = keyof typeof strings
+  // --- Settings: language picker ---
+  settingsLanguageHeading: 'Język interfejsu',
+  settingsLanguageHint: 'Wybór zapamiętuje ta przeglądarka. Tekst opowieści zostaje bez zmian.',
+  /** Endonyms — deliberately identical in both dictionaries. */
+  languageNameEn: 'English',
+  languageNamePl: 'Polski',
+
+  // --- Settings: voices (global catalog) ---
+  settingsVoicesHeading: 'Głosy',
+  settingsVoicesHint:
+    'Katalog głosów jest wspólny dla wszystkich światów. Posłuchaj głosu, zanim powierzysz mu opowieść.',
+  /** What the play button actually reads out. */
+  voicesSampleHint: 'Próbka czyta jedno stałe zdanie w języku danego głosu.',
+  voicesEmpty: 'Brak zdefiniowanych głosów',
+  voicesEmptyHint: 'Dodaj pierwszy przyciskiem „Dodaj głos”.',
+  voicesLoadError: 'Nie udało się pobrać listy głosów.',
+  voicesDefaultBadge: 'domyślny',
+  voicesNoReferenceWav: 'brak nagrania wzorcowego',
+  /** Plain-language capability, derived from what the engine can do (supportsCloning). */
+  voicesCloned: 'głos klonowany',
+  voicesBuiltIn: 'głos wbudowany',
+  voicesPlay: 'Odsłuchaj próbkę',
+  voicesStop: 'Zatrzymaj',
+  voicesPreparing: 'przygotowuję…',
+  voicesReadyToPlay: 'Gotowe — dotknij, aby odtworzyć',
+  voicesPreviewError: 'Nie udało się przygotować próbki.',
+  voicesDetails: 'Szczegóły',
+  voicesEngineLabel: 'Silnik',
+  voicesExaggerationLabel: 'Ekspresja (exaggeration)',
+  voicesCfgLabel: 'Prowadzenie (cfg)',
+  voicesReferenceFileLabel: 'Nagranie wzorcowe',
+  voicesRerecord: 'Nagraj próbkę jeszcze raz',
+  voicesSetDefault: 'Ustaw jako domyślny',
+  voicesReplaceReference: 'Zmień nagranie wzorcowe',
+  /** The ⋯ button on a card, and the sheet it opens. {name} is the voice id. */
+  voicesMenuOpen: 'Więcej działań — {name}',
+  voicesMenuTitle: 'Działania dla głosu',
+  voicesAdd: 'Dodaj głos',
+  voicesAddTitle: 'Nowy głos',
+  voicesAddDescription:
+    'Nazwa, silnik i co najmniej jeden język. Nagranie wzorcowe możesz dodać od razu.',
+  voicesEditTitle: 'Edytuj głos',
+  voicesEditDescription: 'Nazwa zostaje bez zmian — po niej opowieści rozpoznają głos.',
+  voicesNameLabel: 'Nazwa',
+  voicesNamePlaceholder: 'np. narrator-pl-babcia',
+  voicesNameInvalid: 'Nazwa: małe litery, cyfry i myślniki.',
+  voicesNameTaken: 'Głos o tej nazwie już istnieje.',
+  voicesEngineHint: 'Silniki klonujące kopiują nagranie wzorcowe; pozostałe mają głosy stałe.',
+  voicesLanguagesLabel: 'Języki',
+  voicesLanguagesRequired: 'Wybierz co najmniej jeden język.',
+  voicesKnobsHint: 'Używa ich tylko część silników — w razie wątpliwości zostaw puste.',
+  voicesKnobInvalid: 'Ekspresja i prowadzenie muszą być liczbami.',
+  voicesReferenceLabel: 'Nagranie wzorcowe (.wav)',
+  voicesReferenceHint: 'Silnik kopiuje ten głos. Nowe nagranie zastąpi próbkę zrobioną ze starego.',
+  /** Shown instead of the upload field when the chosen engine has fixed voices. */
+  voicesReferenceUnsupported: 'Ten silnik ma stałe, wytrenowane głosy — ignoruje nagranie wzorcowe.',
+  voicesWavOnly: 'Przyjmowane są tylko pliki .wav.',
+  voicesDeleteTitle: 'Usunąć ten głos?',
+  /** {name} is the voice id. */
+  voicesDeleteBody: 'Usuwa „{name}” z katalogu razem z próbką i danymi pomocniczymi.',
+  voicesDeleteWav: 'Usuń też nagranie wzorcowe',
+  voicesSaveError: 'Nie udało się zapisać zmiany.',
+  voicesAdvancedShow: 'Zaawansowane: edytuj plik voices.json',
+  voicesAdvancedHide: 'Ukryj edytor pliku',
+  voicesAdvancedHint:
+    'Katalog to zwykły plik. Wszystko powyżej edytuje go za Ciebie — to tylko na wyjątkowe przypadki.',
+  voicesInvalidJson: 'Nieprawidłowy JSON — plik i tak można zapisać',
+
+  // --- Samples (temporary TTS shelf) ---
+  samplesTitle: 'Próbki audio (tymczasowe)',
+  samplesHint:
+    'Porównania silników TTS i głosów referencyjnych. Strona zniknie po wyborze silnika.',
+  samplesLoadError: 'Nie udało się pobrać listy próbek.',
+}

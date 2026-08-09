@@ -48,6 +48,7 @@ public sealed class SessionStoriesOptions
         [JobType.RegenScene] = 15,
         [JobType.Verify] = 10,
         [JobType.RenderTts] = 60,
+        [JobType.PreviewVoice] = 10,
     };
 
     public TimeSpan TimeoutFor(JobType type)

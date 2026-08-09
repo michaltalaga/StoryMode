@@ -1,6 +1,6 @@
 namespace SessionStories.Core.Jobs;
 
-public enum JobType { Transcribe, Generate, RegenScene, Verify, RenderTts }
+public enum JobType { Transcribe, Generate, RegenScene, Verify, RenderTts, PreviewVoice }
 
 public enum JobState { Queued, Running, Succeeded, Failed, Cancelled }
 
@@ -20,6 +20,9 @@ public sealed class JobRecord
     public string? SceneId { get; init; }
     public string? FeedbackNote { get; init; }
     public string? File { get; init; }
+
+    /// <summary>PreviewVoice jobs only — they belong to a voice, not to a story.</summary>
+    public string? VoiceId { get; init; }
 
     public JobState State { get; set; } = JobState.Queued;
     public string Stage { get; set; } = "";

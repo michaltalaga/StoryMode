@@ -6,8 +6,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ApiError, audioUrl, postJson } from '../api/client'
 import { useStories, useUniverses } from '../api/queries'
 import type { StorySummary, VariantSummary } from '../api/types'
+import type { Strings } from '../i18n'
+import { useStrings } from '../i18n'
 import { usePlayerStore } from '../player/playerStore'
-import { strings } from '../strings'
 
 // ---------------------------------------------------------------------------
 // Stage tracker (spec -> outline -> draft -> audio)
@@ -15,11 +16,13 @@ import { strings } from '../strings'
 
 const STAGES = ['spec', 'outline', 'draft', 'audio'] as const
 
-const STAGE_LABELS: Record<VariantSummary['stage'], string> = {
-  spec: strings.stageSpec,
-  outline: strings.stageOutline,
-  draft: strings.stageDraft,
-  audio: strings.stageAudio,
+function stageLabels(strings: Strings): Record<VariantSummary['stage'], string> {
+  return {
+    spec: strings.stageSpec,
+    outline: strings.stageOutline,
+    draft: strings.stageDraft,
+    audio: strings.stageAudio,
+  }
 }
 
 function stageIndex(stage: VariantSummary['stage']): number {
@@ -27,13 +30,11 @@ function stageIndex(stage: VariantSummary['stage']): number {
 }
 
 function StageDots({ stage }: { stage: VariantSummary['stage'] }) {
+  const label = stageLabels(useStrings())[stage]
+
   const reached = stageIndex(stage)
   return (
-    <span
-      className="inline-flex items-center gap-1"
-      title={STAGE_LABELS[stage]}
-      aria-label={STAGE_LABELS[stage]}
-    >
+    <span className="inline-flex items-center gap-1" title={label} aria-label={label}>
       {STAGES.map((s, i) => (
         <span
           key={s}
@@ -82,6 +83,7 @@ const inputCls =
 const labelCls = 'block text-sm font-medium text-stone-700 mb-1'
 
 function NewStoryDialog() {
+  const strings = useStrings()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const universesQuery = useUniverses()
@@ -282,6 +284,8 @@ function NewStoryDialog() {
 // ---------------------------------------------------------------------------
 
 export default function StoryList() {
+  const strings = useStrings()
+  const STAGE_LABELS = stageLabels(strings)
   const storiesQuery = useStories()
   const navigate = useNavigate()
   const play = usePlayerStore((s) => s.play)

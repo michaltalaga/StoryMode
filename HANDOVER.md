@@ -47,10 +47,11 @@ universes/
     constraints.md        <- hand-written, see below
     bible.md              <- accumulates across sessions
     characters.md         <- recurring cast
-    voices.json           <- which TTS conditionals per POV
   grimdark/
     ...
 ```
+
+(Voices turned out to be global, not per-universe — see the addendum.)
 
 `session.json` should be hand-editable. If the panel ever becomes a bottleneck,
 I want to skip it and edit JSON directly. Keep it that dumb.
@@ -297,3 +298,7 @@ contract) invalidated a few details:
   `--bare` (it switches billing off the subscription login).
 - **CUDA 13 runtime is staged repo-locally** in `models/cuda` (no system install);
   the code prepends it to the process PATH automatically.
+- **Voices are global, not per-universe** — the catalog lives at `library/voices.json`
+  with reference wavs in `library/voices/` and rendered previews in
+  `library/voice-previews/`. A voice is an engine/hardware concern shared by every
+  story world; `session.<v>.json` still names which voice a variant uses.

@@ -1,6 +1,7 @@
-// Universe page (agent 7): constraints | bible | fakty | postacie | głosy.
+// Universe page (agent 7): constraints | bible | fakty | postacie.
 // Markdown files are edited as plain text with ETag optimistic concurrency
 // (409 -> reload dialog). "fakty" is the bible write-back approval queue.
+// Głosy nie mieszkają już tutaj — katalog jest globalny (Ustawienia → Głosy).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -8,7 +9,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ConflictError, getWithETag, postJson, putWithETag } from '../api/client'
 import { usePendingFacts, useUniverses } from '../api/queries'
 import type { UniversePendingFact } from '../api/types'
-import { strings } from '../strings'
+import type { Strings } from '../i18n'
+import { useStrings } from '../i18n'
 
 // ---------------------------------------------------------------------------
 // Shared bits
@@ -35,6 +37,7 @@ interface ConflictState {
  * dialog rather than a background refetch.
  */
 function useEditableUniverseFile(universeId: string, fileName: string) {
+  const strings = useStrings()
   const path = `/api/universes/${encodeURIComponent(universeId)}/files/${fileName
     .split('/')
     .map(encodeURIComponent)
@@ -63,7 +66,7 @@ function useEditableUniverseFile(universeId: string, fileName: string) {
     } finally {
       setLoading(false)
     }
-  }, [path])
+  }, [path, strings.error])
 
   useEffect(() => {
     void load()
@@ -90,7 +93,7 @@ function useEditableUniverseFile(universeId: string, fileName: string) {
         setSaving(false)
       }
     },
-    [etag, path, text],
+    [etag, path, strings.error, text],
   )
 
   return {
@@ -123,6 +126,8 @@ function useEditableUniverseFile(universeId: string, fileName: string) {
 type EditableFile = ReturnType<typeof useEditableUniverseFile>
 
 function ConflictDialog({ file }: { file: EditableFile }) {
+  const strings = useStrings()
+
   return (
     <Dialog.Root open={file.conflict !== null} onOpenChange={(open) => !open && file.dismissConflict()}>
       <Dialog.Portal>
@@ -157,6 +162,8 @@ function ConflictDialog({ file }: { file: EditableFile }) {
 }
 
 function FileStates({ file }: { file: EditableFile }) {
+  const strings = useStrings()
+
   if (file.loading) {
     return <p className="py-8 text-center text-sm text-stone-500">{strings.loading}</p>
   }
@@ -178,6 +185,7 @@ function FileStates({ file }: { file: EditableFile }) {
 // ---------------------------------------------------------------------------
 
 function MarkdownFileTab({ universeId, fileName }: { universeId: string; fileName: string }) {
+  const strings = useStrings()
   const file = useEditableUniverseFile(universeId, fileName)
   // Desktop is edit-focused, phone is read-focused (edit behind a button).
   const [editing, setEditing] = useState(isDesktopViewport)
@@ -260,6 +268,7 @@ function factKey(f: UniversePendingFact): string {
 }
 
 function PendingFactsTab({ universeId }: { universeId: string }) {
+  const strings = useStrings()
   const query = usePendingFacts(universeId)
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set<string>())
@@ -412,169 +421,21 @@ function PendingFactsTab({ universeId }: { universeId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Głosy — voices.json as cards + raw editor
-// ---------------------------------------------------------------------------
-
-interface VoiceCard {
-  id: string
-  languages: string[]
-  exaggeration: number | null
-  cfg: number | null
-  provider: string | null
-}
-
-function toNumberOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function toStringArray(value: unknown): string[] {
-  if (typeof value === 'string') return [value]
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string')
-  return []
-}
-
-/** Defensive parse: voices.json may be an array, an {id: voice} map, or {voices:[...]}. */
-function parseVoices(text: string): VoiceCard[] | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    return null
-  }
-  let entries: [string | null, unknown][]
-  if (Array.isArray(parsed)) {
-    entries = parsed.map((item): [string | null, unknown] => [null, item])
-  } else if (typeof parsed === 'object' && parsed !== null) {
-    const record = parsed as Record<string, unknown>
-    entries = Array.isArray(record['voices'])
-      ? (record['voices'] as unknown[]).map((item): [string | null, unknown] => [null, item])
-      : Object.entries(record)
-  } else {
-    return null
-  }
-  const cards: VoiceCard[] = []
-  for (const [key, value] of entries) {
-    if (typeof value !== 'object' || value === null) continue
-    const voice = value as Record<string, unknown>
-    const id = typeof voice['id'] === 'string' ? voice['id'] : key
-    if (id === null || id === '') continue
-    cards.push({
-      id,
-      languages: toStringArray(voice['languages'] ?? voice['language']),
-      exaggeration: toNumberOrNull(voice['exaggeration']),
-      cfg: toNumberOrNull(voice['cfg'] ?? voice['cfgWeight'] ?? voice['cfg_weight']),
-      provider: typeof voice['provider'] === 'string' ? voice['provider'] : null,
-    })
-  }
-  return cards
-}
-
-function VoicesTab({ universeId }: { universeId: string }) {
-  const file = useEditableUniverseFile(universeId, 'voices.json')
-  const [rawMode, setRawMode] = useState(false)
-
-  const voices = useMemo(() => parseVoices(file.text), [file.text])
-
-  const states = <FileStates file={file} />
-  if (file.loading || file.loadError !== null) return states
-
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="mr-auto text-xs text-stone-400">voices.json</span>
-        <button type="button" className={btnGhost} onClick={() => setRawMode((v) => !v)}>
-          {rawMode ? strings.voicesShowCards : strings.builderRawJson}
-        </button>
-        {rawMode && (
-          <>
-            <button type="button" className={btnGhost} disabled={file.dirty} onClick={() => void file.reload()}>
-              {strings.refresh}
-            </button>
-            <button type="button" className={btnPrimary} disabled={!file.dirty || file.saving} onClick={file.save}>
-              {file.saving ? strings.saving : strings.save}
-            </button>
-          </>
-        )}
-      </div>
-
-      {rawMode ? (
-        <>
-          {file.dirty && voices === null && (
-            <p className="mb-2 text-xs text-red-700">{strings.voicesInvalidJson}</p>
-          )}
-          {file.saveError !== null && (
-            <p className="mb-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">{file.saveError}</p>
-          )}
-          <textarea
-            value={file.text}
-            onChange={(e) => file.setText(e.target.value)}
-            spellCheck={false}
-            className="min-h-[60vh] w-full resize-y rounded-xl border border-stone-300 bg-white p-4 font-mono text-sm leading-relaxed text-stone-900 focus:border-stone-500 focus:outline-none"
-          />
-        </>
-      ) : voices === null ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          {strings.voicesParseError}
-        </p>
-      ) : voices.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-stone-300 py-10 text-center text-sm text-stone-500">
-          {strings.voicesEmpty}
-        </p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {voices.map((voice) => (
-            <article key={voice.id} className="rounded-xl border border-stone-200 bg-white p-4">
-              <header className="flex items-start justify-between gap-2">
-                <h3 className="break-all font-semibold text-stone-900">{voice.id}</h3>
-                {voice.provider !== null && (
-                  <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-800">
-                    {voice.provider}
-                  </span>
-                )}
-              </header>
-              {voice.languages.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {voice.languages.map((lang) => (
-                    <span key={lang} className="rounded bg-stone-100 px-1.5 py-0.5 text-xs uppercase text-stone-600">
-                      {lang}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <dt className="text-xs text-stone-400">exaggeration</dt>
-                  <dd className="text-stone-800">{voice.exaggeration ?? '—'}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-stone-400">cfg</dt>
-                  <dd className="text-stone-800">{voice.cfg ?? '—'}</dd>
-                </div>
-              </dl>
-            </article>
-          ))}
-        </div>
-      )}
-      <ConflictDialog file={file} />
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
+/** Tab ids double as ?tab= values, so they stay Polish slugs regardless of UI language. */
 const TABS = [
-  { id: 'constraints', label: strings.tabConstraints, file: 'constraints.md' },
-  { id: 'bible', label: strings.tabBible, file: 'bible.md' },
-  { id: 'fakty', label: strings.tabFacts, file: null },
-  { id: 'postacie', label: strings.tabCharacters, file: 'characters.md' },
-  { id: 'glosy', label: strings.tabVoices, file: null },
-] as const
+  { id: 'constraints', labelKey: 'tabConstraints', file: 'constraints.md' },
+  { id: 'bible', labelKey: 'tabBible', file: 'bible.md' },
+  { id: 'fakty', labelKey: 'tabFacts', file: null },
+  { id: 'postacie', labelKey: 'tabCharacters', file: 'characters.md' },
+] as const satisfies readonly { id: string; labelKey: keyof Strings; file: string | null }[]
 
 type TabId = (typeof TABS)[number]['id']
 
 export default function Universe() {
+  const strings = useStrings()
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const universesQuery = useUniverses()
@@ -608,17 +469,15 @@ export default function Universe() {
             }`}
             onClick={() => setSearchParams({ tab: t.id }, { replace: true })}
           >
-            {t.label}
+            {strings[t.labelKey]}
           </button>
         ))}
       </nav>
 
       {activeTab.file !== null ? (
         <MarkdownFileTab key={activeTab.file} universeId={universeId} fileName={activeTab.file} />
-      ) : activeTab.id === 'fakty' ? (
-        <PendingFactsTab universeId={universeId} />
       ) : (
-        <VoicesTab universeId={universeId} />
+        <PendingFactsTab universeId={universeId} />
       )}
     </main>
   )

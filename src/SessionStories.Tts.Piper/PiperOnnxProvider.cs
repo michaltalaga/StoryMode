@@ -18,7 +18,13 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
 
     public string Id => "piper-onnx";
 
-    public TtsCapabilities Capabilities { get; } = new(
+    public TtsCapabilities Capabilities { get; } = DescribeCapabilities(options);
+
+    /// <summary>
+    /// Capabilities without an instance — callers that only need the metadata (e.g. GET /api/voices)
+    /// have no reason to build a provider just to read a constant.
+    /// </summary>
+    public static TtsCapabilities DescribeCapabilities(PiperOptions options) => new(
         Languages: [.. options.VoiceModels.Values
             .Select(LanguageFromBundle)
             .OfType<string>()
@@ -26,7 +32,9 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
             .Order()],
         Knobs: [new TtsKnob("speed", 0.5, 2.0, 1.0)],
         OutputSampleRate: 44100,
-        AppliesWatermark: false);
+        AppliesWatermark: false,
+        // Fixed trained VITS models — PrepareVoiceAsync is a no-op and a reference wav is ignored.
+        SupportsVoiceCloning: false);
 
     /// <summary>Piper voices are fixed trained models — there is nothing to prepare or cache.</summary>
     public Task PrepareVoiceAsync(string referenceWavPath, string voiceId, CancellationToken ct = default)

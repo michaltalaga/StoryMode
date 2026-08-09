@@ -50,5 +50,6 @@ r/LocalLLaMA thread by its author, who still reports occasional growl artifacts 
 - `models/chatterbox-pl/` — corrected Polish export (re-download: HF `Folx/chatterbox-ONNX-polish`;
   note `language_model.onnx` is fp32 and is aliased as `language_model_fp16.onnx` — the port
   detects precision from metadata, the filename is just the default lookup name).
-- `library/universes/generic-fantasy/voices/narrator-pl-{gosia,darkman}.wav` — OHF CC0 references.
+- `library/voices/narrator-pl-{gosia,darkman}.wav` — OHF CC0 references (voices went global
+  after this note was written; the catalog is `library/voices.json`).
 - `models/pl-fixed-matched.mp3` — the best-achieved Polish render (the one that was rejected).

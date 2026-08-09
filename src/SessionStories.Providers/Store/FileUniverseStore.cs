@@ -1,6 +1,4 @@
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using SessionStories.Core.Stories;
 using SessionStories.Core.Universes;
@@ -9,20 +7,17 @@ namespace SessionStories.Providers.Store;
 
 /// <summary>
 /// File-backed <see cref="IUniverseStore"/>. Editable files are whitelisted per docs/api.md
-/// (constraints.md | bible.md | characters.md | voices.json | tones/&lt;tone&gt;.md); everything
-/// else — including any traversal attempt — is rejected. Same ETag + atomic-write rules as the
-/// story store.
+/// (constraints.md | bible.md | characters.md | tones/&lt;tone&gt;.md); everything else — including
+/// any traversal attempt — is rejected. Voices are global (see IVoiceStore), not per universe.
+/// Same ETag + atomic-write rules as the story store.
 /// </summary>
 public sealed class FileUniverseStore(string universesRoot) : IUniverseStore
 {
-    private static readonly string[] AllowedRootFiles = ["constraints.md", "bible.md", "characters.md", "voices.json"];
+    private static readonly string[] AllowedRootFiles = ["constraints.md", "bible.md", "characters.md"];
 
     // Single path segment under tones/, .md only; the explicit ".." check below is belt-and-braces.
     private static readonly Regex ToneFileName =
         new(@"^tones/[A-Za-z0-9][A-Za-z0-9._ -]*\.md$", RegexOptions.Compiled);
-
-    private static readonly JsonDocumentOptions TolerantJson =
-        new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
     public string UniversesRoot { get; } = Path.GetFullPath(universesRoot);
 
@@ -72,36 +67,6 @@ public sealed class FileUniverseStore(string universesRoot) : IUniverseStore
         AtomicWrite(path, sb.ToString());
     }
 
-    public VoiceCatalog? ReadVoices(string universeId)
-    {
-        var path = Path.Combine(UniverseDir(universeId), "voices.json");
-        if (!File.Exists(path))
-            return null;
-        // Tolerant parse: unknown fields such as "_notes" are simply ignored.
-        if (JsonNode.Parse(File.ReadAllText(path), null, TolerantJson) is not JsonObject root)
-            return null;
-
-        var voices = new Dictionary<string, VoiceEntry>(StringComparer.Ordinal);
-        if (root["voices"] is JsonObject entries)
-            foreach (var (name, node) in entries)
-            {
-                if (node is not JsonObject entry)
-                    continue;
-                var languages = new List<string>();
-                if (entry["languages"] is JsonArray langs)
-                    foreach (var lang in langs)
-                        if (lang is JsonValue lv && lv.TryGetValue<string>(out var s))
-                            languages.Add(s);
-                voices[name] = new VoiceEntry(
-                    GetString(entry, "provider") ?? "",
-                    languages,
-                    GetString(entry, "referenceWav") ?? "",
-                    GetDouble(entry, "exaggeration"),
-                    GetDouble(entry, "cfg"));
-            }
-        return new VoiceCatalog(voices, GetString(root, "default"));
-    }
-
     // ---- private helpers ----------------------------------------------------------------
 
     private string UniverseDir(string universeId)
@@ -126,7 +91,7 @@ public sealed class FileUniverseStore(string universesRoot) : IUniverseStore
         var dir = requireUniverse ? RequireUniverseDir(universeId) : UniverseDir(universeId);
         if (!IsAllowedName(relativePath))
             throw new ArgumentException(
-                $"'{relativePath}' is not an editable universe file (allowed: constraints.md, bible.md, characters.md, voices.json, tones/<tone>.md).",
+                $"'{relativePath}' is not an editable universe file (allowed: constraints.md, bible.md, characters.md, tones/<tone>.md).",
                 nameof(relativePath));
         return Path.Combine(dir, relativePath.Replace('/', Path.DirectorySeparatorChar));
     }
@@ -141,12 +106,6 @@ public sealed class FileUniverseStore(string universesRoot) : IUniverseStore
             && !name.Contains("..", StringComparison.Ordinal)
             && ToneFileName.IsMatch(name);
     }
-
-    private static string? GetString(JsonObject obj, string name) =>
-        obj[name] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
-
-    private static double? GetDouble(JsonObject obj, string name) =>
-        obj[name] is JsonValue v && v.TryGetValue<double>(out var d) ? d : null;
 
     private static string ComputeETag(string path)
     {

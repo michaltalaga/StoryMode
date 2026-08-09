@@ -1,0 +1,33 @@
+{
+  "voices": {
+    "narrator-en-dry": {
+      "provider": "chatterbox-onnx",
+      "languages": [
+        "en"
+      ],
+      "referenceWav": "narrator-en-dry.wav",
+      "exaggeration": 0.65,
+      "cfg": 0.3
+    },
+    "narrator-pl-dom": {
+      "provider": "piper-onnx",
+      "languages": [
+        "pl"
+      ]
+    },
+    "narrator-pl-gosia": {
+      "provider": "piper-onnx",
+      "languages": [
+        "pl"
+      ]
+    },
+    "narrator-pl-darkman": {
+      "provider": "piper-onnx",
+      "languages": [
+        "pl"
+      ]
+    }
+  },
+  "default": "narrator-en-dry",
+  "_notes": "Voices are global (machine/engine concern, not a story-world one): this catalog lives at library/voices.json, referenceWav names resolve against library/voices/, previews render to library/voice-previews/. A referenceWav only means something for cloning engines (TtsCapabilities.SupportsVoiceCloning) — chatterbox-onnx clones, piper-onnx does not, so the Polish entries carry no referenceWav: their wavs stayed on disk in library/voices/ as the CC0 provenance record and as material the Add-voice flow can reuse. Polish voices render via piper-onnx (sherpa-onnx VITS): fixed trained OHF-Voice pl_PL models (gosia female, darkman male, CC0) with native espeak-ng phonemization — no cloning, no exaggeration/cfg knobs (piper has only 'speed'); which bundle each voice id uses is configured in appsettings SessionStories:Piper:VoiceModels, and narrator-pl-dom currently maps to the gosia bundle. English: Kyutai CC0 voice-donations via chatterbox-onnx (Blake installed as narrator-en-dry; audition pending). Wavs gitignored; never use community .pt files."
+}

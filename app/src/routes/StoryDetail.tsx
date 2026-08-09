@@ -6,8 +6,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ApiError, audioUrl, getWithETag, postJson, putWithETag, recollectionUrl } from '../api/client'
 import { useJobs, useStory } from '../api/queries'
 import type { JobDto, VariantSummary } from '../api/types'
+import type { Strings } from '../i18n'
+import { useStrings } from '../i18n'
 import { usePlayerStore } from '../player/playerStore'
-import { strings } from '../strings'
 
 // ---------------------------------------------------------------------------
 // Local view of GET /api/stories/{sid} (see Program.cs) — the pinned
@@ -56,21 +57,21 @@ function isJobActive(job: JobDto): boolean {
 
 const STAGES = ['spec', 'outline', 'draft', 'audio'] as const
 
-const STAGE_LABELS: Record<VariantSummary['stage'], string> = {
-  spec: strings.stageSpec,
-  outline: strings.stageOutline,
-  draft: strings.stageDraft,
-  audio: strings.stageAudio,
+function stageLabels(strings: Strings): Record<VariantSummary['stage'], string> {
+  return {
+    spec: strings.stageSpec,
+    outline: strings.stageOutline,
+    draft: strings.stageDraft,
+    audio: strings.stageAudio,
+  }
 }
 
 function StageDots({ stage }: { stage: VariantSummary['stage'] }) {
+  const label = stageLabels(useStrings())[stage]
+
   const reached = STAGES.indexOf(stage)
   return (
-    <span
-      className="inline-flex items-center gap-1"
-      title={STAGE_LABELS[stage]}
-      aria-label={STAGE_LABELS[stage]}
-    >
+    <span className="inline-flex items-center gap-1" title={label} aria-label={label}>
       {STAGES.map((s, i) => (
         <span
           key={s}
@@ -92,6 +93,7 @@ const inputCls =
 const labelCls = 'block text-sm font-medium text-stone-700 mb-1'
 
 function AddVariantDialog({ story }: { story: StoryDetailData }) {
+  const strings = useStrings()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -252,6 +254,8 @@ function AddVariantDialog({ story }: { story: StoryDetailData }) {
 // ---------------------------------------------------------------------------
 
 export default function StoryDetail() {
+  const strings = useStrings()
+  const STAGE_LABELS = stageLabels(strings)
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const play = usePlayerStore((s) => s.play)
@@ -430,7 +434,7 @@ export default function StoryDetail() {
                   {busyJob !== undefined && (
                     <span className="animate-pulse rounded-full bg-amber-100 px-2.5 py-0.5 text-xs text-amber-800">
                       {busyJob.state === 'running'
-                        ? `pracuje: ${busyJob.stage !== '' ? busyJob.stage : busyJob.type}`
+                        ? `${strings.jobWorkingPrefix}: ${busyJob.stage !== '' ? busyJob.stage : busyJob.type}`
                         : strings.jobQueued}
                     </span>
                   )}

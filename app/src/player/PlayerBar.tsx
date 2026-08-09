@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
-import { strings as t } from '../strings';
+import { useStrings } from '../i18n';
 import { usePlayerStore } from './playerStore';
 
 function updatePositionState(el: HTMLAudioElement): void {
@@ -25,6 +25,7 @@ function updatePositionState(el: HTMLAudioElement): void {
  * renders a plain bar (nothing when the queue is empty).
  */
 export default function PlayerBar() {
+  const t = useStrings();
   const audioRef = useRef<HTMLAudioElement>(null);
   const loadedUrlRef = useRef<string | null>(null);
 
@@ -75,7 +76,7 @@ export default function PlayerBar() {
       artist: t.appName,
       album: track.variant,
     });
-  }, [track]);
+  }, [track, t.appName]);
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;

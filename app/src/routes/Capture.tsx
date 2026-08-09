@@ -13,7 +13,7 @@ import {
 } from '../api/client'
 import { useJobs, useStory } from '../api/queries'
 import type { JobDto } from '../api/types'
-import { strings } from '../strings'
+import { useStrings } from '../i18n'
 
 // ---------------------------------------------------------------------------
 // Helpers (recollection filenames are <person>.<ext>; transcripts <person>.txt)
@@ -79,6 +79,7 @@ function TranscriptDialog({
   file: string | null
   onClose: () => void
 }) {
+  const strings = useStrings()
   const [text, setText] = useState('')
   const [etag, setEtag] = useState('')
   const [phase, setPhase] = useState<'loading' | 'view' | 'confirm' | 'edit'>('loading')
@@ -226,6 +227,7 @@ function TranscriptDialog({
 // ---------------------------------------------------------------------------
 
 export default function Capture() {
+  const strings = useStrings()
   const { id = '' } = useParams()
   const queryClient = useQueryClient()
   const storyQuery = useStory(id)

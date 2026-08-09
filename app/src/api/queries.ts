@@ -2,10 +2,18 @@
 // Query keys: ['stories'] | ['stories', id] | ['jobs'] | ['jobs', id]
 //           | ['draft', storyId, variant] | ['universes']
 //           | ['universes', id, 'files', name] | ['universes', id, 'pending-facts']
-//           | ['status']
+//           | ['voices'] | ['voice-providers'] | ['status']
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getJson, getWithETag, postJson } from './client';
+import {
+  del,
+  getJson,
+  getWithETag,
+  patchJson,
+  postJson,
+  putJson,
+  uploadVoiceReference,
+} from './client';
 import type {
   JobDto,
   SceneDto,
@@ -14,7 +22,14 @@ import type {
   StorySummary,
   UniverseListItem,
   UniversePendingFact,
+  VoiceCreate,
+  VoiceDto,
+  VoicePatch,
+  VoiceProviderDto,
 } from './types';
+
+/** Media URL helpers live in client.ts; re-exported so routes need one import. */
+export { voicePreviewUrl } from './client';
 
 // ---------------------------------------------------------------------------
 // Stories
@@ -60,6 +75,9 @@ export function useJobs() {
       return jobs.map((job) => ({ ...job, logTail: [] }));
     },
     refetchInterval: (query) => (query.state.data?.some(isActive) ? 2_000 : 10_000),
+    // Renders take minutes and phone users switch apps while waiting: keep polling
+    // in the background so completion effects fire instead of stalling until return.
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -76,6 +94,7 @@ export function useJob(id: string) {
       const job = query.state.data;
       return job === undefined || isActive(job) ? 2_000 : false;
     },
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -181,6 +200,82 @@ export function approveFacts(
   return postJson(
     `/api/stories/${encodeURIComponent(storyId)}/bible/${encodeURIComponent(variant)}/approve`,
     { acceptedLineIds },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Voices (global catalog — library/voices.json)
+// ---------------------------------------------------------------------------
+
+export function useVoices() {
+  return useQuery({
+    queryKey: ['voices'],
+    queryFn: () => getJson<VoiceDto[]>('/api/voices'),
+    staleTime: 30_000,
+  });
+}
+
+/** Enqueues a previewVoice job; the rendered mp3 shows up at voicePreviewUrl(id). */
+export function previewVoice(voiceId: string): Promise<{ jobId: string }> {
+  return postJson<{ jobId: string }>(
+    `/api/voices/${encodeURIComponent(voiceId)}/preview`,
+    undefined,
+  );
+}
+
+export function usePreviewVoice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: previewVoice,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+}
+
+/** TTS engines this build has registered — the "engine" select in the add-voice dialog. */
+export function useVoiceProviders() {
+  return useQuery({
+    queryKey: ['voice-providers'],
+    queryFn: () => getJson<VoiceProviderDto[]>('/api/voices/providers'),
+    staleTime: Infinity,
+  });
+}
+
+/** Every catalog mutation ends the same way: the cards re-read /api/voices. */
+function useVoiceMutation<TVariables>(mutationFn: (variables: TVariables) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voices'] }),
+  });
+}
+
+/** Create or replace a catalog entry (the id is immutable, so editing reuses this). */
+export function useSaveVoice() {
+  return useVoiceMutation((body: VoiceCreate) => postJson<VoiceDto>('/api/voices', body));
+}
+
+export function usePatchVoice() {
+  return useVoiceMutation(({ id, patch }: { id: string; patch: VoicePatch }) =>
+    patchJson<VoiceDto>(`/api/voices/${encodeURIComponent(id)}`, patch),
+  );
+}
+
+/** The reference wav may back several entries, so it only goes when explicitly asked for. */
+export function useDeleteVoice() {
+  return useVoiceMutation(({ id, deleteWav }: { id: string; deleteWav: boolean }) =>
+    del(`/api/voices/${encodeURIComponent(id)}${deleteWav ? '?deleteWav=true' : ''}`),
+  );
+}
+
+export function useSetDefaultVoice() {
+  return useVoiceMutation((id: string) => putJson<void>('/api/voices/default', { id }));
+}
+
+/** Multipart wav upload; the server drops the now-stale preview and conditionals cache. */
+export function useUploadVoiceReference() {
+  return useVoiceMutation(
+    ({ id, file, onProgress }: { id: string; file: File; onProgress: (pct: number) => void }) =>
+      uploadVoiceReference(id, file, onProgress),
   );
 }
 

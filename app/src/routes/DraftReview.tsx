@@ -9,7 +9,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, ConflictError, del, getWithETag, putWithETag } from '../api/client';
 import { enqueueJob, useDraft, useEnqueueJob, useJobs } from '../api/queries';
 import type { JobDto, SceneDto, VerifyFlag } from '../api/types';
-import { strings } from '../strings';
+import type { Strings } from '../i18n';
+import { useStrings } from '../i18n';
 
 // Kopia zapasowa sceny sprzed regeneracji (draft.<v>.<sceneId>.prev.md) — GET zwraca
 // tekst albo 404 (wtedy przycisk "Przywróć poprzednią" się nie pokazuje), DELETE ją porzuca.
@@ -18,7 +19,7 @@ function prevPath(storyId: string, variant: string, sceneId: string): string {
 }
 
 /** Mapuje slug reguły weryfikacji na ludzką etykietę; nieznany slug wraca bez zmian. */
-function ruleLabel(rule: string): string {
+function ruleLabel(strings: Strings, rule: string): string {
   switch (rule) {
     case 'given-drift':
       return strings.verifyRuleGivenDrift;
@@ -41,17 +42,18 @@ function ruleLabel(rule: string): string {
 
 /** Składa feedbackNote z zaznaczonych uwag weryfikacji i własnego tekstu użytkownika. */
 function composeFeedbackNote(
+  strings: Strings,
   flags: readonly VerifyFlag[],
   checked: readonly boolean[],
   freeText: string,
 ): string {
   const lines = flags
     .filter((_, i) => checked[i] === true)
-    .map((flag) => `- [${ruleLabel(flag.rule)}] ${flag.detail}`);
+    .map((flag) => `- [${ruleLabel(strings, flag.rule)}] ${flag.detail}`);
   const extra = freeText.trim();
   if (lines.length === 0) return extra;
-  const base = `Zastosuj następujące uwagi weryfikacji:\n${lines.join('\n')}`;
-  return extra.length > 0 ? `${base}\n\nDodatkowo: ${extra}` : base;
+  const base = `${strings.feedbackNoteHeader}\n${lines.join('\n')}`;
+  return extra.length > 0 ? `${base}\n\n${strings.feedbackNoteExtra}: ${extra}` : base;
 }
 
 /** Wyciąga cytat z detail flagi weryfikacji: "..." albo „..." — proste dopasowanie. */
@@ -147,6 +149,7 @@ interface SceneCardProps {
 }
 
 function SceneCard(props: SceneCardProps) {
+  const strings = useStrings();
   const { scene } = props;
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -189,7 +192,7 @@ function SceneCard(props: SceneCardProps) {
         }}
         disabled={props.regenActive}
       >
-        Regeneruj
+        {strings.regenerate}
       </button>
       {prevText !== null && (
         <button
@@ -207,7 +210,7 @@ function SceneCard(props: SceneCardProps) {
               <Spinner />
             </span>
           )}
-          Przywróć poprzednią
+          {strings.sceneRestoreShort}
         </button>
       )}
     </>
@@ -258,7 +261,7 @@ function SceneCard(props: SceneCardProps) {
                 title={flag.rule}
                 className="mr-2 inline-block rounded bg-rose-200 px-1.5 py-0.5 text-xs font-medium"
               >
-                {ruleLabel(flag.rule)}
+                {ruleLabel(strings, flag.rule)}
               </span>
               {flag.detail}
             </li>
@@ -285,7 +288,7 @@ function SceneCard(props: SceneCardProps) {
                   disabled={props.saving}
                   className="min-h-10 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
                 >
-                  Zapisz
+                  {strings.save}
                 </button>
                 <button
                   type="button"
@@ -295,7 +298,7 @@ function SceneCard(props: SceneCardProps) {
                   disabled={props.saving}
                   className={actionButtonClass}
                 >
-                  Odrzuć zmiany
+                  {strings.discardChanges}
                 </button>
               </>
             )}
@@ -312,6 +315,7 @@ function SceneCard(props: SceneCardProps) {
 }
 
 export default function DraftReview() {
+  const strings = useStrings();
   const { id = '', variant = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -541,7 +545,7 @@ export default function DraftReview() {
           to={`/stories/${id}/v/${variant}/progress`}
           className="inline-flex min-h-11 items-center rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100"
         >
-          Postęp
+          {strings.progressTitle}
         </Link>
         {scenes.length > 0 && (
           <button
@@ -561,7 +565,7 @@ export default function DraftReview() {
             disabled={variantBusy || renderTtsMutation.isPending}
             className="min-h-11 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
           >
-            Renderuj audio
+            {strings.renderAudio}
           </button>
         )}
       </div>
@@ -591,13 +595,13 @@ export default function DraftReview() {
               to={`/stories/${id}/v/${variant}/builder`}
               className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
             >
-              Otwórz kreator
+              {strings.openBuilder}
             </Link>
             <Link
               to={`/stories/${id}/v/${variant}/progress`}
               className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
             >
-              Zobacz postęp
+              {strings.actionProgress}
             </Link>
           </div>
         </div>
@@ -742,7 +746,7 @@ export default function DraftReview() {
                         />
                         <span className="min-w-0">
                           <span className="block text-sm font-medium text-stone-900" title={flag.rule}>
-                            {ruleLabel(flag.rule)}
+                            {ruleLabel(strings, flag.rule)}
                           </span>
                           <span className="mt-0.5 block text-xs text-stone-500">{flag.detail}</span>
                         </span>
@@ -777,13 +781,13 @@ export default function DraftReview() {
                   if (regenFor)
                     regenMutation.mutate({
                       sceneId: regenFor,
-                      note: composeFeedbackNote(regenFlags, checkedFlags, feedbackNote),
+                      note: composeFeedbackNote(strings, regenFlags, checkedFlags, feedbackNote),
                     });
                 }}
                 disabled={!regenCanSubmit || regenMutation.isPending}
                 className="min-h-10 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
               >
-                Regeneruj
+                {strings.regenerate}
               </button>
             </div>
           </Dialog.Content>
@@ -808,14 +812,14 @@ export default function DraftReview() {
             </Dialog.Description>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => resolveConflict(false)} className={actionButtonClass}>
-                Wczytaj wersję z dysku
+                {strings.conflictLoadFromDisk}
               </button>
               <button
                 type="button"
                 onClick={() => resolveConflict(true)}
                 className="min-h-10 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
               >
-                Zachowaj moją i zapisz ponownie
+                {strings.conflictKeepMine}
               </button>
             </div>
           </Dialog.Content>

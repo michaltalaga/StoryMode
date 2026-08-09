@@ -63,6 +63,7 @@ public sealed class FileUniverseStoreTests : IDisposable
 
     [Theory]
     [InlineData("notes.md")]
+    [InlineData("voices.json")] // voices are global now — IVoiceStore owns library/voices.json
     [InlineData("voices.yaml")]
     [InlineData("constraints.md.bak")]
     [InlineData("../escape.md")]
@@ -145,72 +146,4 @@ public sealed class FileUniverseStoreTests : IDisposable
             ReadRaw(id, "bible.md"));
     }
 
-    // ---- ReadVoices ---------------------------------------------------------------------
-
-    [Fact]
-    public void ReadVoices_ParsesRealCatalogShape_IgnoringUnknownFields()
-    {
-        var id = NewUniverse();
-        // mirrors library/universes/generic-fantasy/voices.json, including the "_notes" field
-        WriteRaw(id, "voices.json", """
-            {
-              "voices": {
-                "narrator-en-dry": {
-                  "provider": "chatterbox-onnx",
-                  "languages": ["en"],
-                  "referenceWav": "voices/narrator-en-dry.wav",
-                  "exaggeration": 0.65,
-                  "cfg": 0.3,
-                  "someFutureKnob": true
-                },
-                "narrator-pl-dom": {
-                  "provider": "chatterbox-onnx",
-                  "languages": ["pl"],
-                  "referenceWav": "voices/narrator-pl-dom.wav",
-                  "exaggeration": 0.6,
-                  "cfg": 0.3
-                }
-              },
-              "default": "narrator-en-dry",
-              "_notes": "referenceWav paths are relative to this universe folder; wavs are gitignored."
-            }
-            """);
-
-        var catalog = _store.ReadVoices(id)!;
-
-        Assert.Equal("narrator-en-dry", catalog.Default);
-        Assert.Equal(2, catalog.Voices.Count);
-        var en = catalog.Voices["narrator-en-dry"];
-        Assert.Equal("chatterbox-onnx", en.Provider);
-        Assert.Equal(["en"], en.Languages);
-        Assert.Equal("voices/narrator-en-dry.wav", en.ReferenceWav);
-        Assert.Equal(0.65, en.Exaggeration);
-        Assert.Equal(0.3, en.Cfg);
-        var pl = catalog.Voices["narrator-pl-dom"];
-        Assert.Equal(["pl"], pl.Languages);
-        Assert.Equal(0.6, pl.Exaggeration);
-    }
-
-    [Fact]
-    public void ReadVoices_ToleratesMissingEntryFields()
-    {
-        var id = NewUniverse();
-        WriteRaw(id, "voices.json", "{ \"voices\": { \"bare\": {} } }");
-
-        var catalog = _store.ReadVoices(id)!;
-
-        Assert.Null(catalog.Default);
-        var bare = catalog.Voices["bare"];
-        Assert.Equal("", bare.Provider);
-        Assert.Empty(bare.Languages);
-        Assert.Equal("", bare.ReferenceWav);
-        Assert.Null(bare.Exaggeration);
-        Assert.Null(bare.Cfg);
-    }
-
-    [Fact]
-    public void ReadVoices_MissingFile_ReturnsNull()
-    {
-        Assert.Null(_store.ReadVoices(NewUniverse()));
-    }
 }

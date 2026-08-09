@@ -3,12 +3,13 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import * as Dialog from '@radix-ui/react-dialog';
 import { ConflictError, getWithETag, putWithETag } from '../api/client';
-import { enqueueJob, useUniverseFile } from '../api/queries';
+import { enqueueJob, useUniverseFile, useVoices } from '../api/queries';
 import type { SessionJson } from '../api/types';
-import { strings } from '../strings';
+import type { Strings } from '../i18n';
+import { useStrings } from '../i18n';
 
-/* Lokalne aliasy — całość tekstu mieszka w src/strings.ts. */
-const t = {
+/* Lokalne aliasy — całość tekstu mieszka w src/i18n. */
+const aliases = (strings: Strings) => ({
   back: strings.backToStory,
   variantLabel: strings.variantLabel,
   presetGiven: strings.builderPresetGiven,
@@ -59,7 +60,13 @@ const t = {
   loading: strings.loading,
   loadError: strings.builderLoadError,
   sessionBroken: strings.builderSessionBroken,
-};
+});
+
+/** Aliased copy for this route; re-resolves when the language changes. */
+function useT() {
+  const strings = useStrings();
+  return useMemo(() => aliases(strings), [strings]);
+}
 
 type Json = Record<string, unknown>;
 type BeatFlag = 'given' | 'invent';
@@ -91,21 +98,6 @@ function parseCharacters(md: string): { slug: string; about: string }[] {
     }
   }
   return out;
-}
-
-function parseVoices(jsonText: string): { id: string; languages: string[] }[] {
-  try {
-    const parsed: unknown = JSON.parse(jsonText);
-    if (!isObj(parsed) || !isObj(parsed.voices)) return [];
-    return Object.entries(parsed.voices).map(([id, v]) => ({
-      id,
-      languages: isObj(v) && Array.isArray(v.languages)
-        ? v.languages.filter((x): x is string => typeof x === 'string')
-        : [],
-    }));
-  } catch {
-    return [];
-  }
 }
 
 /** Next unused bN = max existing numeric suffix + 1; deleted ids are never reused, existing never renumbered. */
@@ -193,6 +185,7 @@ function BeatCard({
   onMove: (index: number, delta: -1 | 1) => void;
   onDelete: (index: number) => void;
 }) {
+  const t = useT();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const text = asStr(beat.text);
   const flag: BeatFlag = asStr(beat.flag) === 'invent' ? 'invent' : 'given';
@@ -279,6 +272,7 @@ function BeatCard({
 }
 
 export default function SessionBuilder() {
+  const t = useT();
   const { id: storyId = '', variant = '' } = useParams();
   const navigate = useNavigate();
 
@@ -326,18 +320,22 @@ export default function SessionBuilder() {
   }, [storyId, variant]);
 
   const universeId = doc ? asStr(doc.universe) : '';
+  const language = doc ? asStr(doc.language) : '';
   const charsQuery = useUniverseFile(universeId, 'characters.md');
-  const voicesQuery = useUniverseFile(universeId, 'voices.json');
+  const voicesQuery = useVoices();
 
   const characters = useMemo(() => {
     const text = fileText(charsQuery.data);
     return text === null ? [] : parseCharacters(text);
   }, [charsQuery.data]);
 
+  // Katalog głosów jest globalny (library/voices.json). Pokazujemy głosy w języku
+  // sesji, a gdy żaden nie pasuje — wszystkie, żeby lista nigdy nie była pusta.
   const voices = useMemo(() => {
-    const text = fileText(voicesQuery.data);
-    return text === null ? [] : parseVoices(text);
-  }, [voicesQuery.data]);
+    const all = voicesQuery.data ?? [];
+    const matching = all.filter((v) => v.languages.includes(language));
+    return matching.length > 0 ? matching : all;
+  }, [voicesQuery.data, language]);
 
   /** Merge a patch of known keys into the parsed object; all unknown fields survive untouched. */
   const mutate = (fn: (d: SessionJson) => Json) => {
@@ -473,7 +471,6 @@ export default function SessionBuilder() {
   const pov = asStr(doc.pov);
   const povOptions = pov !== '' && !castRefs.includes(pov) ? [...castRefs, pov] : castRefs;
   const skipList = Array.isArray(doc.skip) ? doc.skip : [];
-  const language = asStr(doc.language);
   const voiceId = asStr(doc.voice);
 
   return (

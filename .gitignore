@@ -18,6 +18,7 @@ library/**/*.mp3
 library/**/*.wav
 library/**/*.m4a
 library/voice-cache/
+library/voice-previews/
 
 # IDE / OS
 .vscode/

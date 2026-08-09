@@ -7,7 +7,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getJson, postJson } from '../api/client';
 import { useJobs, useStory } from '../api/queries';
 import type { JobDto } from '../api/types';
-import { strings } from '../strings';
+import type { Strings } from '../i18n';
+import { format, useStrings } from '../i18n';
 
 /** Kształt odpowiedzi GET /api/jobs/{id} (Program.cs) — ogon logu przychodzi w polu `log`. */
 interface JobDetailResponse {
@@ -28,21 +29,26 @@ interface JobDetailResponse {
   logTail?: string[];
 }
 
-const STATE_LABELS: Record<string, string> = {
-  queued: strings.jobQueued,
-  running: strings.jobRunning,
-  succeeded: strings.jobSucceeded,
-  failed: strings.jobFailed,
-  cancelled: strings.jobCancelled,
-};
+function stateLabels(strings: Strings): Record<string, string> {
+  return {
+    queued: strings.jobQueued,
+    running: strings.jobRunning,
+    succeeded: strings.jobSucceeded,
+    failed: strings.jobFailed,
+    cancelled: strings.jobCancelled,
+  };
+}
 
-const TYPE_LABELS: Record<string, string> = {
-  transcribe: strings.jobTypeTranscribe,
-  generate: strings.jobTypeGenerate,
-  regenScene: strings.jobTypeRegenScene,
-  verify: strings.jobTypeVerify,
-  renderTts: strings.jobTypeRenderTts,
-};
+function typeLabels(strings: Strings): Record<string, string> {
+  return {
+    transcribe: strings.jobTypeTranscribe,
+    generate: strings.jobTypeGenerate,
+    regenScene: strings.jobTypeRegenScene,
+    verify: strings.jobTypeVerify,
+    renderTts: strings.jobTypeRenderTts,
+    previewVoice: strings.jobTypePreviewVoice,
+  };
+}
 
 interface ChecklistItem {
   label: string;
@@ -54,7 +60,12 @@ interface ChecklistItem {
  * generate: extract → outline → "scene sN/M" → verify → bible (→ "done"),
  * regenScene: "regen sN" → verify, pozostałe typy mają jeden etap.
  */
-function buildChecklist(type: string, stage: string, state: string): { items: ChecklistItem[]; current: number } {
+function buildChecklist(
+  strings: Strings,
+  type: string,
+  stage: string,
+  state: string,
+): { items: ChecklistItem[]; current: number } {
   const finished = state === 'succeeded' || stage === 'done';
   if (type === 'generate') {
     const items: ChecklistItem[] = [
@@ -69,7 +80,9 @@ function buildChecklist(type: string, stage: string, state: string): { items: Ch
     else if (stage.startsWith('scene')) {
       current = 2;
       const m = stage.match(/^scene s(\d+)\/(\d+)$/);
-      items[2].detail = m ? `scena ${m[1]} z ${m[2]}` : stage.replace(/^scene\s*/, '');
+      items[2].detail = m
+        ? format(strings.stageSceneOf, { n: m[1], total: m[2] })
+        : stage.replace(/^scene\s*/, '');
     } else if (stage === 'verify') current = 3;
     else if (stage === 'bible') current = 4;
     if (finished) current = items.length;
@@ -85,7 +98,7 @@ function buildChecklist(type: string, stage: string, state: string): { items: Ch
     if (finished) current = items.length;
     return { items, current };
   }
-  const items: ChecklistItem[] = [{ label: TYPE_LABELS[type] ?? (stage || type) }];
+  const items: ChecklistItem[] = [{ label: typeLabels(strings)[type] ?? (stage || type) }];
   return { items, current: finished ? items.length : 0 };
 }
 
@@ -125,6 +138,9 @@ function Spinner() {
 }
 
 export default function Progress() {
+  const strings = useStrings();
+  const STATE_LABELS = stateLabels(strings);
+  const TYPE_LABELS = typeLabels(strings);
   const { id = '', variant = '' } = useParams();
   const queryClient = useQueryClient();
 
@@ -239,19 +255,19 @@ export default function Progress() {
               to={`/stories/${id}`}
               className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
             >
-              Wróć do opowieści
+              {strings.backToStory}
             </Link>
             <Link
               to={`/stories/${id}/v/${variant}/builder`}
               className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
             >
-              Otwórz kreator
+              {strings.openBuilder}
             </Link>
             <Link
               to={`/stories/${id}/v/${variant}/draft`}
               className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
             >
-              Zobacz szkic
+              {strings.viewDraft}
             </Link>
           </div>
         </div>
@@ -259,7 +275,7 @@ export default function Progress() {
     );
   }
 
-  const { items, current } = buildChecklist(type, stage, state);
+  const { items, current } = buildChecklist(strings, type, stage, state);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6">
@@ -273,11 +289,14 @@ export default function Progress() {
             </span>
             {elapsedSeconds !== null && (
               <span>
-                Czas: <span className="font-mono">{formatElapsed(elapsedSeconds)}</span>
+                {strings.jobElapsed}: <span className="font-mono">{formatElapsed(elapsedSeconds)}</span>
               </span>
             )}
             {typeof costUsd === 'number' && (
-              <span>Koszt: {costUsd.toLocaleString('pl-PL', { style: 'currency', currency: 'USD' })}</span>
+              <span>
+                {strings.jobCost}:{' '}
+                {costUsd.toLocaleString(strings.locale, { style: 'currency', currency: 'USD' })}
+              </span>
             )}
           </div>
 
@@ -340,7 +359,7 @@ export default function Progress() {
                 disabled={cancelMutation.isPending}
                 className="min-h-11 rounded-lg border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
               >
-                Przerwij zadanie
+                {strings.jobCancelAction}
               </button>
             </div>
           )}
@@ -352,13 +371,13 @@ export default function Progress() {
               to={`/stories/${id}/v/${variant}/draft`}
               className="flex min-h-14 items-center justify-center rounded-xl bg-amber-600 px-6 text-lg font-semibold text-white shadow-sm hover:bg-amber-700"
             >
-              Przejrzyj szkic
+              {strings.reviewDraft}
             </Link>
             <Link
               to="/listen"
               className="flex min-h-14 items-center justify-center rounded-xl bg-violet-600 px-6 text-lg font-semibold text-white shadow-sm hover:bg-violet-700"
             >
-              Słuchaj
+              {strings.goListen}
             </Link>
           </div>
         )}
