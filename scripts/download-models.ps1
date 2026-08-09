@@ -71,6 +71,30 @@ foreach ($f in $files) {
     if ($LASTEXITCODE -ne 0) { throw "download failed: $($f.url)" }
 }
 
+# Piper Polish voices for sherpa-onnx (each bundle: VITS .onnx + tokens.txt + espeak-ng-data).
+# CPU-only, no Python — curl + tar, skip when the bundle folder already exists.
+$piperDir = Join-Path $repo 'models\piper'
+New-Item -ItemType Directory -Force $piperDir | Out-Null
+$piperBundles = @(
+    'vits-piper-pl_PL-gosia-medium'
+    'vits-piper-pl_PL-darkman-medium'
+)
+foreach ($b in $piperBundles) {
+    if (Test-Path (Join-Path $piperDir $b)) {
+        Write-Host "skip (exists): $b"
+        continue
+    }
+    $archive = Join-Path $piperDir "$b.tar.bz2"
+    $url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$b.tar.bz2"
+    Write-Host "downloading: $url"
+    & curl.exe -L --fail -C - -o $archive $url
+    if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
+    & tar -xjf $archive -C $piperDir
+    if ($LASTEXITCODE -ne 0) { throw "extract failed: $archive" }
+    Remove-Item $archive
+    Write-Host "piper bundle staged into models\piper\$b"
+}
+
 Write-Host "`nSHA256 (compare against the Hugging Face file pages):"
 foreach ($f in $files) {
     if (Test-Path $f.out) {

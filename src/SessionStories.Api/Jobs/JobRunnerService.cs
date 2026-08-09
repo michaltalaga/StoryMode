@@ -10,7 +10,8 @@ namespace SessionStories.Api.Jobs;
 /// <summary>
 /// Drains the job queue strictly serially — one GPU, one job. ML providers come from
 /// factories so each job loads its model lazily and disposes it at job end: Whisper (~3 GB)
-/// and Chatterbox (~2.5–3 GB) must never coexist in VRAM.
+/// and Chatterbox (~2.5–3 GB) must never coexist in VRAM. TTS factories are keyed by
+/// provider id; voices.json picks one per voice.
 /// </summary>
 public sealed class JobRunnerService(
     JobRegistry registry,
@@ -18,10 +19,11 @@ public sealed class JobRunnerService(
     IUniverseStore universes,
     IStoryGenerator generator,
     Func<ISttProvider> sttFactory,
-    Func<ITtsProvider> ttsFactory,
+    IReadOnlyDictionary<string, Func<ITtsProvider>> ttsFactories,
     SessionStoriesOptions options,
     ILogger<JobRunnerService> logger) : BackgroundService
 {
+    private const string DefaultTtsProviderId = "chatterbox-onnx";
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await foreach (var jobId in registry.Reader.ReadAllAsync(stoppingToken))
@@ -207,6 +209,15 @@ public sealed class JobRunnerService(
         var progress = new DelegateProgress<TtsProgress>(
             p => job.AppendLog($"tts {p.ChunkIndex}/{p.ChunkCount}: {p.Message}"));
 
+        var providerId = string.IsNullOrWhiteSpace(entry?.Provider) ? DefaultTtsProviderId : entry!.Provider;
+        if (!ttsFactories.TryGetValue(providerId, out var ttsFactory))
+        {
+            throw new InvalidOperationException(
+                $"Voice '{voiceId}' wants TTS provider '{providerId}', which is not registered. " +
+                $"Registered: {string.Join(", ", ttsFactories.Keys)}.");
+        }
+        job.AppendLog($"voice '{voiceId}' via provider '{providerId}'");
+
         var tts = ttsFactory();
         try
         {
@@ -214,12 +225,14 @@ public sealed class JobRunnerService(
             {
                 await tts.SynthesizeAsync(request, progress, ct);
             }
-            catch (InvalidOperationException) when (entry is not null)
+            catch (InvalidOperationException) when (entry?.ReferenceWav is { Length: > 0 })
             {
-                // Voice conditionals missing from the cache: prepare from the catalog reference wav, retry once.
+                // Voice conditionals missing from the cache: prepare from the catalog reference wav,
+                // retry once. For providers with fixed voices PrepareVoiceAsync is a no-op, so the
+                // retry just re-raises the original error.
                 var referenceWav = Path.GetFullPath(
                     Path.Combine(universes.UniversesRoot, session.Universe, entry.ReferenceWav));
-                job.AppendLog($"voice '{voiceId}' not cached; preparing conditionals from {entry.ReferenceWav}");
+                job.AppendLog($"voice '{voiceId}' not prepared; preparing from {entry.ReferenceWav}");
                 await tts.PrepareVoiceAsync(referenceWav, voiceId, ct);
                 await tts.SynthesizeAsync(request, progress, ct);
             }

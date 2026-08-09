@@ -4,6 +4,7 @@
     <Project Path="src/SessionStories.Core/SessionStories.Core.csproj" />
     <Project Path="src/SessionStories.Providers/SessionStories.Providers.csproj" />
     <Project Path="src/SessionStories.Tts.Chatterbox/SessionStories.Tts.Chatterbox.csproj" />
+    <Project Path="src/SessionStories.Tts.Piper/SessionStories.Tts.Piper.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SessionStories.Tests/SessionStories.Tests.csproj" />

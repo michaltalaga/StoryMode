@@ -9,6 +9,7 @@ public sealed class SessionStoriesOptions
     public string RepoRoot { get; private set; } = "";
     public WhisperOptions Whisper { get; set; } = new();
     public TtsOptions Tts { get; set; } = new();
+    public PiperOptions Piper { get; set; } = new();
     public ClaudeOptions Claude { get; set; } = new();
     public JobsOptions Jobs { get; set; } = new();
 
@@ -21,6 +22,12 @@ public sealed class SessionStoriesOptions
     {
         public string ModelDir { get; set; } = "";
         public string VoiceCacheDir { get; set; } = "";
+    }
+
+    public sealed class PiperOptions
+    {
+        public string ModelsRoot { get; set; } = "";
+        public Dictionary<string, string> VoiceModels { get; set; } = [];
     }
 
     public sealed class ClaudeOptions
@@ -57,6 +64,13 @@ public sealed class SessionStoriesOptions
         Whisper.ModelPath = ResolvePath(Whisper.ModelPath, Path.Combine(RepoRoot, "models", "whisper", "ggml-large-v3.bin"));
         Tts.ModelDir = ResolvePath(Tts.ModelDir, Path.Combine(RepoRoot, "models", "chatterbox"));
         Tts.VoiceCacheDir = ResolvePath(Tts.VoiceCacheDir, Path.Combine(LibraryRoot, "voice-cache"));
+        Piper.ModelsRoot = ResolvePath(Piper.ModelsRoot, Path.Combine(RepoRoot, "models", "piper"));
+        if (Piper.VoiceModels.Count == 0)
+        {
+            Piper.VoiceModels["narrator-pl-dom"] = "vits-piper-pl_PL-gosia-medium";
+            Piper.VoiceModels["narrator-pl-gosia"] = "vits-piper-pl_PL-gosia-medium";
+            Piper.VoiceModels["narrator-pl-darkman"] = "vits-piper-pl_PL-darkman-medium";
+        }
 
         foreach (var (type, minutes) in DefaultTimeouts)
             Jobs.TimeoutMinutes.TryAdd(type, minutes);

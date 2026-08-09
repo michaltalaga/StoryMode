@@ -8,7 +8,7 @@ invocation shape. If code or plan disagrees with this page, this page wins; chan
 - API + SPA: `http://0.0.0.0:5211` (Kestrel, LAN; firewall Private profile; no auth v1 — all routes under `/api` = future auth seam).
 - Vite dev proxy: `/api → http://localhost:5211`.
 - `LibraryRoot` default: `<repo>/library` (contains `stories/`, `universes/`, `voice-cache/`). Overridable in `appsettings.json`.
-- Models: `<repo>/models` (`chatterbox/`, `whisper/`). Downloaded by `scripts/download-models.ps1`, never committed.
+- Models: `<repo>/models` (`chatterbox/`, `whisper/`, `piper/`). Downloaded by `scripts/download-models.ps1`, never committed.
 - Skill: `<repo>/skills/story/` (committed content).
 
 ## Conventions
@@ -65,6 +65,12 @@ appends in the story folder. SPA polls `GET /api/jobs` every 2 s while any job i
 GPU residency: model sessions are lazy-loaded per job and disposed at job end — Whisper (~3 GB)
 and Chatterbox (~2.5–3 GB) must never coexist in VRAM.
 
+**TTS providers**: `renderTts` supports multiple engines, selected per voice via the
+`provider` field in the universe's `voices.json` (`chatterbox-onnx` when absent). `piper-onnx`
+(Piper VITS via sherpa-onnx, CPU) serves fixed trained voices — no cloning, no reference wav,
+single `speed` knob — with native espeak-ng phonemization (used for Polish narration); voice id →
+model bundle mapping lives in `appsettings.json` under `SessionStories:Piper:VoiceModels`.
+
 ### Status
 `GET /api/status` → `{claude: {found, version}, gpu, models: {whisper, chatterbox}, libraryRoot}`.
 
@@ -87,4 +93,4 @@ and Chatterbox (~2.5–3 GB) must never coexist in VRAM.
 | `generate` | extract → outline → scene s1..sN → verify → bible | session (empty fields only), outline, draft (via scratch-splice), verify.md, bible.pending.md |
 | `regenScene` | regen sN (fresh session) | scratch → splice; previous block saved to `draft.<v>.sN.prev.md`; clears the scene's `verify.<v>.md` section |
 | `verify` | verify | `verify.<v>.md` |
-| `renderTts` | — (Chatterbox ONNX) | `audio/<v>.mp3` |
+| `renderTts` | — (TTS provider per voice: Chatterbox ONNX or Piper/sherpa-onnx) | `audio/<v>.mp3` |

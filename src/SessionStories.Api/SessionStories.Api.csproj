@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SessionStories.Providers\SessionStories.Providers.csproj" />
     <ProjectReference Include="..\SessionStories.Tts.Chatterbox\SessionStories.Tts.Chatterbox.csproj" />
+    <ProjectReference Include="..\SessionStories.Tts.Piper\SessionStories.Tts.Piper.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

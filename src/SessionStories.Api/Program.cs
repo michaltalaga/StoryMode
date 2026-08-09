@@ -13,6 +13,7 @@ using SessionStories.Providers.Claude;
 using SessionStories.Providers.Store;
 using SessionStories.Providers.Whisper;
 using SessionStories.Tts.Chatterbox;
+using SessionStories.Tts.Piper;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,11 +44,21 @@ builder.Services.AddSingleton<Func<ISttProvider>>(_ => () => new WhisperNetSttPr
 {
     ModelPath = options.Whisper.ModelPath,
 }));
-builder.Services.AddSingleton<Func<ITtsProvider>>(_ => () => new ChatterboxOnnxProvider(new ChatterboxOptions
-{
-    ModelDir = options.Tts.ModelDir,
-    VoiceCacheDir = options.Tts.VoiceCacheDir,
-}));
+// TTS providers, keyed by id; voices.json "provider" picks one per voice (JobRunnerService).
+builder.Services.AddSingleton<IReadOnlyDictionary<string, Func<ITtsProvider>>>(_ =>
+    new Dictionary<string, Func<ITtsProvider>>
+    {
+        ["chatterbox-onnx"] = () => new ChatterboxOnnxProvider(new ChatterboxOptions
+        {
+            ModelDir = options.Tts.ModelDir,
+            VoiceCacheDir = options.Tts.VoiceCacheDir,
+        }),
+        ["piper-onnx"] = () => new PiperOnnxProvider(new PiperOptions
+        {
+            ModelsRoot = options.Piper.ModelsRoot,
+            VoiceModels = options.Piper.VoiceModels,
+        }),
+    });
 
 builder.Services.AddSingleton<JobRegistry>();
 builder.Services.AddHostedService<JobRunnerService>();

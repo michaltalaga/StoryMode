@@ -8,13 +8,21 @@
       "cfg": 0.3
     },
     "narrator-pl-dom": {
-      "provider": "chatterbox-onnx",
+      "provider": "piper-onnx",
       "languages": ["pl"],
-      "referenceWav": "voices/narrator-pl-dom.wav",
-      "exaggeration": 0.6,
-      "cfg": 0.3
+      "referenceWav": "voices/narrator-pl-dom.wav"
+    },
+    "narrator-pl-gosia": {
+      "provider": "piper-onnx",
+      "languages": ["pl"],
+      "referenceWav": "voices/narrator-pl-gosia.wav"
+    },
+    "narrator-pl-darkman": {
+      "provider": "piper-onnx",
+      "languages": ["pl"],
+      "referenceWav": "voices/narrator-pl-darkman.wav"
     }
   },
   "default": "narrator-en-dry",
-  "_notes": "referenceWav paths are relative to this universe folder; wavs are gitignored. English references: Kyutai CC0 set (*_enhanced.wav, check per-voice licensing — EARS-derived voices are CC BY-NC). Polish references: record your own (~10s, quiet room). Wavs only, never community .pt files."
+  "_notes": "Polish voices render via piper-onnx (sherpa-onnx VITS): fixed trained OHF-Voice pl_PL models (gosia female, darkman male, CC0) with native espeak-ng phonemization — no cloning, no exaggeration/cfg knobs (piper has only 'speed'). Which bundle each voice id uses is configured in appsettings SessionStories:Piper:VoiceModels; narrator-pl-dom currently maps to the gosia bundle. The referenceWav entries for pl voices are leftovers from the chatterbox era and are unused by piper. English: Kyutai CC0 voice-donations via chatterbox-onnx (Blake installed as narrator-en-dry; audition pending). Wavs gitignored; never use community .pt files."
 }
