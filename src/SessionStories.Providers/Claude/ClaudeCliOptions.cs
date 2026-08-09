@@ -19,7 +19,10 @@ public sealed class ClaudeCliOptions
     /// Runaway protection: --max-turns does not exist in CLI 2.1.170, so the budget cap
     /// plus the process timeout are the only guards.
     /// </summary>
-    public decimal MaxBudgetUsd { get; set; } = 0.50m;
+    // Real-run data (2026-08-09): every stage re-reads the skill + session + universe corpus,
+    // which alone approaches $0.50; resumed scene sessions accumulate the outline session's
+    // cost on top. $2 is a brake against runaways, not a target.
+    public decimal MaxBudgetUsd { get; set; } = 2.00m;
 
     public int TimeoutMinutes { get; set; } = 15;
 

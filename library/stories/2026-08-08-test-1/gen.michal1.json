@@ -1,0 +1,40 @@
+{
+  "draftSessionId": "a5544d60-65f6-487f-92fe-b71e8dc1e3b3",
+  "invocations": [
+    {
+      "stage": "extract",
+      "sessionId": "df47352c-6026-43a9-9f00-a88d9cb7b12a",
+      "costUsd": 0,
+      "at": "2026-08-09T00:23:41.9995970\u002B00:00",
+      "success": false
+    },
+    {
+      "stage": "extract",
+      "sessionId": "6d10ac76-a973-4464-bd72-e01dbe1fe84f",
+      "costUsd": 0.40527900000000006,
+      "at": "2026-08-09T00:28:52.9205920\u002B00:00",
+      "success": true
+    },
+    {
+      "stage": "outline",
+      "sessionId": "a5544d60-65f6-487f-92fe-b71e8dc1e3b3",
+      "costUsd": 0.47349749999999996,
+      "at": "2026-08-09T00:30:22.9324669\u002B00:00",
+      "success": true
+    },
+    {
+      "stage": "scene s1",
+      "sessionId": "a5544d60-65f6-487f-92fe-b71e8dc1e3b3",
+      "costUsd": 0.521134,
+      "at": "2026-08-09T00:32:00.6505313\u002B00:00",
+      "success": false
+    },
+    {
+      "stage": "scene s1",
+      "sessionId": "a5edbd0c-1c36-41f7-83e9-2b38af64ff8e",
+      "costUsd": 0.5387445,
+      "at": "2026-08-09T00:33:45.7024809\u002B00:00",
+      "success": false
+    }
+  ]
+}

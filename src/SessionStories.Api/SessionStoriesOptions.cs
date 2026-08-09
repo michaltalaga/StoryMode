@@ -26,7 +26,7 @@ public sealed class SessionStoriesOptions
     public sealed class ClaudeOptions
     {
         public string ExecutablePath { get; set; } = "claude";
-        public decimal MaxBudgetUsd { get; set; } = 0.50m;
+        public decimal MaxBudgetUsd { get; set; } = 2.00m;
     }
 
     public sealed class JobsOptions
