@@ -7,17 +7,11 @@
 `[lang]` tag prepend remains) and no watermarking. The KV-cache generation loop is
 unchanged from the reference.
 
-## Setup
+## Setup — Docker only, no Python on the machine
 
-From this directory (`tools/parity`), on Windows PowerShell:
-
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-(On bash: `python -m venv .venv && source .venv/Scripts/activate && pip install -r requirements.txt`.)
+This is the one Python artifact in the project, kept solely as validation ground
+truth (re-run it after ONNX Runtime upgrades or loop changes). **No Python is ever
+installed on the machine**: it runs in a disposable container.
 
 The models must already be present in `models/chatterbox` at the repo root
 (`speech_encoder.onnx`, `embed_tokens.onnx`, `language_model_fp16.onnx`,
@@ -26,9 +20,12 @@ The models must already be present in `models/chatterbox` at the repo root
 
 ## Running
 
+From the repo root, on Windows PowerShell (first run installs packages inside the
+throwaway container, ~1 min; nothing persists after `--rm`):
+
 ```powershell
-python reference_inference.py --text "Hello there, adventurers." --lang en `
-    --dump-tokens out\py_tokens.json --wav out\py_output.wav
+docker run --rm -v "${PWD}:/work" -w /work/tools/parity python:3.12-slim `
+    sh -c "pip install -q -r requirements.txt && python reference_inference.py --text 'Hello there, adventurers.' --lang en --dump-tokens /work/models/py_tokens.json --wav /work/models/py_output.wav"
 ```
 
 Options:

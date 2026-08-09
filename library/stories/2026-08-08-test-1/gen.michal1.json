@@ -126,6 +126,13 @@
       "costUsd": null,
       "at": "2026-08-09T01:07:43.7691758\u002B00:00",
       "success": true
+    },
+    {
+      "stage": "verify",
+      "sessionId": "2aafecfe-939c-4aef-8720-e1718e1a0c1c",
+      "costUsd": 0.833245,
+      "at": "2026-08-09T01:20:22.9417655\u002B00:00",
+      "success": true
     }
   ]
 }

@@ -29,6 +29,38 @@ $files = @(
     @{ url = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin'; out = "$whisperDir\ggml-large-v3.bin" }
 )
 
+# CUDA 13 + cuDNN 9 runtime DLLs, staged repo-locally from NVIDIA's official redist CDN
+# (no system install, no Python/pip). OnnxSessionSet prepends models\cuda to the process
+# PATH automatically. Versions pinned to a known-good set for onnxruntime 1.28.
+$cudaDir = Join-Path $repo 'models\cuda'
+$cudaStage = Join-Path $repo 'models\cuda-redist'
+New-Item -ItemType Directory -Force $cudaDir, $cudaStage | Out-Null
+$nv = 'https://developer.download.nvidia.com/compute'
+$cudaZips = @(
+    "$nv/cuda/redist/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-13.3.29-archive.zip"
+    "$nv/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.6.0.2-archive.zip"
+    "$nv/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.3.0.29-archive.zip"
+    "$nv/cuda/redist/libcurand/windows-x86_64/libcurand-windows-x86_64-10.4.3.29-archive.zip"
+    "$nv/cuda/redist/cuda_nvrtc/windows-x86_64/cuda_nvrtc-windows-x86_64-13.3.33-archive.zip"
+    "$nv/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.24.0.43_cuda13-archive.zip"
+)
+if (-not (Test-Path (Join-Path $cudaDir 'cublasLt64_13.dll'))) {
+    foreach ($z in $cudaZips) {
+        $out = Join-Path $cudaStage (Split-Path $z -Leaf)
+        if (-not (Test-Path $out)) {
+            Write-Host "downloading: $z"
+            & curl.exe -L --fail -C - -o $out $z
+            if ($LASTEXITCODE -ne 0) { throw "download failed: $z" }
+        }
+        Expand-Archive $out (Join-Path $cudaStage ('x_' + [IO.Path]::GetFileNameWithoutExtension($out))) -Force
+    }
+    Get-ChildItem $cudaStage -Recurse -Filter *.dll | ForEach-Object { Copy-Item $_.FullName $cudaDir -Force }
+    Remove-Item $cudaStage -Recurse -Force
+    Write-Host "CUDA runtime staged into models\cuda"
+} else {
+    Write-Host "skip (exists): CUDA runtime in models\cuda"
+}
+
 foreach ($f in $files) {
     if (Test-Path $f.out) {
         Write-Host "skip (exists): $(Split-Path $f.out -Leaf)"
