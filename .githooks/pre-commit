@@ -1,0 +1,11 @@
+#!/bin/sh
+# User-content policy (see .gitignore note): real stories under library/stories stay
+# untracked until decided — only the marrowfield reference fixture may be committed.
+blocked=$(git diff --cached --name-only --diff-filter=AM | grep '^library/stories/' | grep -v '^library/stories/2026-08-08-marrowfield/')
+if [ -n "$blocked" ]; then
+  echo "pre-commit: refusing to commit user story content (policy: keep untracked):" >&2
+  echo "$blocked" | sed 's/^/  /' >&2
+  echo "Unstage with: git restore --staged <path>  (or git rm -r --cached <folder>)" >&2
+  exit 1
+fi
+exit 0
