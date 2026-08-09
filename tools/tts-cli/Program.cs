@@ -204,7 +204,7 @@ static string FindRepoRoot()
         var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "SessionStories.slnx")))
+            if (File.Exists(Path.Combine(dir.FullName, "StoryMode.slnx")))
                 return dir.FullName;
             dir = dir.Parent;
         }

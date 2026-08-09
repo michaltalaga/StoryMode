@@ -19,5 +19,17 @@ library/**/*.wav
 library/**/*.m4a
 library/voice-cache/
 
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+TestResults/
+.claude/settings.local.json
+
 # misc
 *.log
+
+# NOTE: library/stories user content (beyond the committed marrowfield reference fixture)
+# is deliberately NOT ignored — whether user content belongs in git is an open decision.
+# It stays visible as untracked; do not blanket `git add -A` it.

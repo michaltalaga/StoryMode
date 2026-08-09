@@ -65,12 +65,12 @@ public sealed class SessionStoriesOptions
     private string ResolvePath(string configured, string fallback)
         => Path.GetFullPath(string.IsNullOrWhiteSpace(configured) ? fallback : configured, RepoRoot);
 
-    /// <summary>Walks up from the content root to the folder containing SessionStories.slnx.</summary>
+    /// <summary>Walks up from the content root to the folder containing StoryMode.slnx.</summary>
     private static string FindRepoRoot(string start)
     {
         for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "SessionStories.slnx")))
+            if (File.Exists(Path.Combine(dir.FullName, "StoryMode.slnx")))
                 return dir.FullName;
         }
         return start;
