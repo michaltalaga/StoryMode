@@ -1,9 +1,16 @@
 #!/bin/sh
 # User-content policy (see .gitignore note): real stories under library/stories stay
 # untracked until decided — only the marrowfield reference fixture may be committed.
-blocked=$(git diff --cached --name-only --diff-filter=AM | grep '^library/stories/' | grep -v '^library/stories/2026-08-08-marrowfield/')
+#
+# library/voices.json joined them once voices became installable: it is no longer a curated
+# catalog but a live record of what this machine has installed, including voices cloned from
+# the household's own recordings, pointing at wavs that are themselves gitignored. The shelf
+# in voice-gallery/ is the committed app content a fresh clone installs from.
+blocked=$(git diff --cached --name-only --diff-filter=AM \
+  | grep -E '^library/(stories/|voices\.json$)' \
+  | grep -v '^library/stories/2026-08-08-marrowfield/')
 if [ -n "$blocked" ]; then
-  echo "pre-commit: refusing to commit user story content (policy: keep untracked):" >&2
+  echo "pre-commit: refusing to commit user content (policy: keep untracked):" >&2
   echo "$blocked" | sed 's/^/  /' >&2
   echo "Unstage with: git restore --staged <path>  (or git rm -r --cached <folder>)" >&2
   exit 1

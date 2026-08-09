@@ -299,6 +299,35 @@ contract) invalidated a few details:
 - **CUDA 13 runtime is staged repo-locally** in `models/cuda` (no system install);
   the code prepends it to the process PATH automatically.
 - **Voices are global, not per-universe** — the catalog lives at `library/voices.json`
-  with reference wavs in `library/voices/` and rendered previews in
+  with reference wavs in `library/voices/` and rendered samples in
   `library/voice-previews/`. A voice is an engine/hardware concern shared by every
   story world; `session.<v>.json` still names which voice a variant uses.
+- **A voice is an installed artifact, not a config row.** The first cut modelled a
+  voice as the engine plus its raw knobs, which forced the reader to be the
+  integration layer: pick an engine, supply a wav, invent numbers for `exaggeration`
+  and `cfg`. That is unusable, and it was a missing abstraction rather than a UI
+  problem. There are now three concepts where there was one: an **installed voice**
+  (human name, locale, named delivery, engine-private `engineData`), a **shelf** of
+  installable offers (`IVoiceGallery`, curated in `<repo>/voice-gallery/`), and a
+  per-engine **installer** (`IVoiceInstaller`) that does whatever that engine needs.
+  Adding an engine means registering an installer — nothing else, and no
+  configuration file, learns about it. In particular the piper bundle name moved out
+  of `appsettings.json` and onto the voice, because a voice you cannot add without
+  editing config is a voice the app cannot really offer.
+- **Delivery is a named style, never a number.** A voice stores `calm`/`natural`/`lively`;
+  each provider declares those ids over whatever knobs it actually has, and the job
+  runner resolves them at render time. Two engines with unrelated knobs
+  (`exaggeration`+`cfg` vs `speed`) share one control and the numbers stay backstage.
+- **Recording a voice needs https, so the app serves both.** Browsers hide the
+  microphone on an insecure origin, which made "record grandma reading" impossible
+  over the plain-http LAN address. Kestrel now also listens on `:5212` with the
+  ASP.NET dev certificate. It is issued for `localhost`, so a phone reaching the box
+  by hostname warns once and must be waved through; after that the origin is secure
+  and capture works. The capture path encodes wav in the browser rather than
+  server-side, because Android records webm/opus and Windows Media Foundation cannot
+  decode it — the browser can always decode what it just recorded.
+- **Samples are an install-time obligation.** An install is not finished until the
+  voice has a playable mp3 on disk, so pressing play is a static file read and never
+  a render — the earlier design had play trigger a multi-minute synthesis. Shelf
+  samples are pre-rendered by the real engine and committed, so you can hear a voice
+  before downloading it, and installing one is a copy.

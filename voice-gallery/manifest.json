@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "_notes": "The curated shelf: voices you can install, one entry per offer. App content, not library content — it ships with the code because only the engines in this build know how to install these. Every entry has a sample under samples/ that was rendered by the real engine at the 'natural' style, so a reader hears the actual voice before committing to a download, and installing a shelf voice is a file copy rather than a render. 'downloadBytes' is what a fresh machine fetches; an asset already on disk is reused and the install is instant. Add an entry: drop the sample in samples/, add the row here — no code change.",
+  "voices": [
+    {
+      "key": "builtin/narrator-en",
+      "name": "Narrator",
+      "description": "Even and unhurried. The voice Story Mode ships with.",
+      "locale": "en-US",
+      "downloadBytes": 0,
+      "license": "MIT",
+      "attribution": "Chatterbox default voice, Resemble AI (MIT)",
+      "sample": "builtin-en.mp3",
+      "install": {
+        "engine": "chatterbox-onnx",
+        "referenceWavFile": "narrator-en.wav"
+      }
+    },
+    {
+      "key": "piper/en_US-lessac",
+      "name": "Lessac",
+      "description": "American English. Clearer and quicker than the narrator, and flatter — better for long stretches than for drama.",
+      "locale": "en-US",
+      "downloadBytes": 67230653,
+      "license": "MIT",
+      "attribution": "Piper voice en_US-lessac-medium (rhasspy), packaged by sherpa-onnx",
+      "sample": "piper-en-lessac.mp3",
+      "install": {
+        "engine": "piper-onnx",
+        "bundle": "vits-piper-en_US-lessac-medium",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2"
+      }
+    },
+    {
+      "key": "piper/pl_PL-gosia",
+      "name": "Gosia",
+      "description": "Polish, female. Measured and even. Polish still sounds rougher than English — listen to the sample first.",
+      "locale": "pl-PL",
+      "downloadBytes": 67211182,
+      "license": "CC0",
+      "attribution": "OHF-Voice pl_PL-gosia-medium (CC0), packaged by sherpa-onnx",
+      "sample": "piper-pl-gosia.mp3",
+      "install": {
+        "engine": "piper-onnx",
+        "bundle": "vits-piper-pl_PL-gosia-medium",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-pl_PL-gosia-medium.tar.bz2"
+      }
+    },
+    {
+      "key": "piper/pl_PL-darkman",
+      "name": "Darkman",
+      "description": "Polish, male. Low and level. Same caveat as Gosia — hear it before you pick it.",
+      "locale": "pl-PL",
+      "downloadBytes": 67215635,
+      "license": "CC0",
+      "attribution": "OHF-Voice pl_PL-darkman-medium (CC0), packaged by sherpa-onnx",
+      "sample": "piper-pl-darkman.mp3",
+      "install": {
+        "engine": "piper-onnx",
+        "bundle": "vits-piper-pl_PL-darkman-medium",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-pl_PL-darkman-medium.tar.bz2"
+      }
+    }
+  ]
+}

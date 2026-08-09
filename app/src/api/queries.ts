@@ -2,7 +2,7 @@
 // Query keys: ['stories'] | ['stories', id] | ['jobs'] | ['jobs', id]
 //           | ['draft', storyId, variant] | ['universes']
 //           | ['universes', id, 'files', name] | ['universes', id, 'pending-facts']
-//           | ['voices'] | ['voice-providers'] | ['status']
+//           | ['voices'] | ['voice-gallery', 'languages' | 'offers', locale] | ['status']
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -12,7 +12,7 @@ import {
   patchJson,
   postJson,
   putJson,
-  uploadVoiceReference,
+  uploadVoiceRecording,
 } from './client';
 import type {
   JobDto,
@@ -22,14 +22,14 @@ import type {
   StorySummary,
   UniverseListItem,
   UniversePendingFact,
-  VoiceCreate,
   VoiceDto,
+  VoiceLanguageDto,
+  VoiceOfferDto,
   VoicePatch,
-  VoiceProviderDto,
 } from './types';
 
 /** Media URL helpers live in client.ts; re-exported so routes need one import. */
-export { voicePreviewUrl } from './client';
+export { voiceOfferSampleUrl, voicePreviewUrl } from './client';
 
 // ---------------------------------------------------------------------------
 // Stories
@@ -215,7 +215,10 @@ export function useVoices() {
   });
 }
 
-/** Enqueues a previewVoice job; the rendered mp3 shows up at voicePreviewUrl(id). */
+/**
+ * Re-records an installed voice's sample. Not what the play button does — a voice always
+ * has a sample, so playing is a static file read; this is for when you want a fresh one.
+ */
 export function previewVoice(voiceId: string): Promise<{ jobId: string }> {
   return postJson<{ jobId: string }>(
     `/api/voices/${encodeURIComponent(voiceId)}/preview`,
@@ -231,17 +234,30 @@ export function usePreviewVoice() {
   });
 }
 
-/** TTS engines this build has registered — the "engine" select in the add-voice dialog. */
-export function useVoiceProviders() {
+// ---- the shelf -------------------------------------------------------------
+
+/** Step one of "add a voice": which languages have voices to offer. */
+export function useVoiceLanguages() {
   return useQuery({
-    queryKey: ['voice-providers'],
-    queryFn: () => getJson<VoiceProviderDto[]>('/api/voices/providers'),
+    queryKey: ['voice-gallery', 'languages'],
+    queryFn: () => getJson<VoiceLanguageDto[]>('/api/voice-gallery/languages'),
     staleTime: Infinity,
   });
 }
 
-/** Every catalog mutation ends the same way: the cards re-read /api/voices. */
-function useVoiceMutation<TVariables>(mutationFn: (variables: TVariables) => Promise<unknown>) {
+export function useVoiceOffers(locale: string) {
+  return useQuery({
+    queryKey: ['voice-gallery', 'offers', locale],
+    queryFn: () => getJson<VoiceOfferDto[]>(`/api/voice-gallery?locale=${encodeURIComponent(locale)}`),
+    enabled: locale.length > 0,
+    staleTime: Infinity,
+  });
+}
+
+/** Every catalog mutation ends the same way: the list re-reads /api/voices. */
+function useVoiceMutation<TVariables, TResult = unknown>(
+  mutationFn: (variables: TVariables) => Promise<TResult>,
+) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
@@ -249,9 +265,36 @@ function useVoiceMutation<TVariables>(mutationFn: (variables: TVariables) => Pro
   });
 }
 
-/** Create or replace a catalog entry (the id is immutable, so editing reuses this). */
-export function useSaveVoice() {
-  return useVoiceMutation((body: VoiceCreate) => postJson<VoiceDto>('/api/voices', body));
+/**
+ * Installs a shelf voice. Returns the job to watch: downloading and unpacking happen there,
+ * and the voice is only real once it finishes — which is also when its sample exists.
+ */
+export function useInstallVoice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { key: string; name?: string }) =>
+      postJson<{ jobId: string; voiceId: string }>('/api/voices/install', body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+}
+
+/** Same install path, with the reader's own recording instead of a shelf asset. */
+export function useUploadVoiceRecording() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      name,
+      locale,
+      file,
+      onProgress,
+    }: {
+      name: string;
+      locale: string;
+      file: File;
+      onProgress: (pct: number) => void;
+    }) => uploadVoiceRecording(name, locale, file, onProgress),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  });
 }
 
 export function usePatchVoice() {
@@ -260,7 +303,7 @@ export function usePatchVoice() {
   );
 }
 
-/** The reference wav may back several entries, so it only goes when explicitly asked for. */
+/** The reference recording may back several voices, so it only goes when explicitly asked for. */
 export function useDeleteVoice() {
   return useVoiceMutation(({ id, deleteWav }: { id: string; deleteWav: boolean }) =>
     del(`/api/voices/${encodeURIComponent(id)}${deleteWav ? '?deleteWav=true' : ''}`),
@@ -269,14 +312,6 @@ export function useDeleteVoice() {
 
 export function useSetDefaultVoice() {
   return useVoiceMutation((id: string) => putJson<void>('/api/voices/default', { id }));
-}
-
-/** Multipart wav upload; the server drops the now-stale preview and conditionals cache. */
-export function useUploadVoiceReference() {
-  return useVoiceMutation(
-    ({ id, file, onProgress }: { id: string; file: File; onProgress: (pct: number) => void }) =>
-      uploadVoiceReference(id, file, onProgress),
-  );
 }
 
 // ---------------------------------------------------------------------------

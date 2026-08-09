@@ -7,7 +7,14 @@
 // Enums (C# JobType / JobState / pipeline stage, camelCase string form)
 // ---------------------------------------------------------------------------
 
-export type JobType = 'transcribe' | 'generate' | 'regenScene' | 'verify' | 'renderTts' | 'previewVoice';
+export type JobType =
+  | 'transcribe'
+  | 'generate'
+  | 'regenScene'
+  | 'verify'
+  | 'renderTts'
+  | 'previewVoice'
+  | 'installVoice';
 
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -99,7 +106,7 @@ export interface JobDto {
   logTail: string[];
   /** Recollection file (transcribe jobs). Detail route only. */
   file?: string | null;
-  /** Catalog voice id (previewVoice jobs; storyId/variant are empty for those). */
+  /** Voice id (previewVoice/installVoice jobs; storyId/variant are empty for those). */
   voiceId?: string | null;
   /** Seconds since start (or total when finished). Detail route only. */
   elapsedSeconds?: number | null;
@@ -109,47 +116,55 @@ export interface JobDto {
 // Voices (global — library/voices.json, not a universe file)
 // ---------------------------------------------------------------------------
 
-/** GET /api/voices item. */
-export interface VoiceDto {
-  id: string;
-  provider: string;
-  languages: string[];
-  /** Raw catalog value — a bare file name resolved against library/voices/. */
-  referenceWav?: string | null;
-  knobs: { exaggeration: number | null; cfg: number | null };
-  /** Whether that wav actually exists on disk. */
-  hasReferenceWav: boolean;
-  /** Whether library/voice-previews/<id>.mp3 has been rendered. */
-  hasPreview: boolean;
-  isDefault: boolean;
-  /**
-   * Whether this voice's engine can clone an arbitrary voice from a reference wav.
-   * A property of the engine, not of the catalog entry — fixed-voice engines (piper)
-   * ignore any wav, so for them a reference recording is meaningless.
-   */
-  supportsCloning: boolean;
-}
-
-/** GET /api/voices/providers item — the engines this build has registered. */
-export interface VoiceProviderDto {
-  id: string;
-  supportsCloning: boolean;
-}
-
 /**
- * POST /api/voices — creates the entry or overwrites its known fields. A null knob
- * removes it; `referenceWav` and any hand-written JSON on the entry are preserved.
+ * GET /api/voices item — an installed voice, as a person sees it. Carries no engine,
+ * no knob values and no file names on purpose: which engine backs a voice is not
+ * something anyone should have to know or decide.
  */
-export interface VoiceCreate {
+export interface VoiceDto {
+  /** Stable key that stories point at. Plumbing — never render it. */
   id: string;
-  provider: string;
-  languages: string[];
-  exaggeration?: number | null;
-  cfg?: number | null;
+  name: string;
+  description: string;
+  /** BCP-47, e.g. "en-US" / "pl-PL" — drives the flag and the language name. */
+  locale: string;
+  /** A VoiceStyle id: 'calm' | 'natural' | 'lively'. */
+  style: string;
+  /** The deliveries this voice's engine offers, in display order. */
+  styles: string[];
+  isDefault: boolean;
+  /** Install guarantees a sample; false means something went wrong and the card says so. */
+  hasSample: boolean;
+  attribution: string;
+  license: string;
 }
 
-/** PATCH /api/voices/{id} — only the fields present are written. */
-export type VoicePatch = Partial<Omit<VoiceCreate, 'id'>>;
+/** GET /api/voice-gallery/languages item — step one of "add a voice". */
+export interface VoiceLanguageDto {
+  locale: string;
+  offerCount: number;
+  /** Whether any installed engine can copy a recording in this language. */
+  canUpload: boolean;
+}
+
+/** GET /api/voice-gallery?locale= item — a voice you could install. */
+export interface VoiceOfferDto {
+  key: string;
+  name: string;
+  description: string;
+  locale: string;
+  /** What a fresh machine downloads; 0 when the assets already ship. */
+  downloadBytes: number;
+  license: string;
+  attribution: string;
+}
+
+/** PATCH /api/voices/{id} — the only fields a reader may change after install. */
+export interface VoicePatch {
+  name?: string;
+  description?: string;
+  style?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Facts / universes

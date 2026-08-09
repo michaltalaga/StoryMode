@@ -1,6 +1,8 @@
+using SessionStories.Core.Voices;
+
 namespace SessionStories.Core.Jobs;
 
-public enum JobType { Transcribe, Generate, RegenScene, Verify, RenderTts, PreviewVoice }
+public enum JobType { Transcribe, Generate, RegenScene, Verify, RenderTts, PreviewVoice, InstallVoice }
 
 public enum JobState { Queued, Running, Succeeded, Failed, Cancelled }
 
@@ -21,8 +23,11 @@ public sealed class JobRecord
     public string? FeedbackNote { get; init; }
     public string? File { get; init; }
 
-    /// <summary>PreviewVoice jobs only — they belong to a voice, not to a story.</summary>
+    /// <summary>PreviewVoice and InstallVoice jobs only — they belong to a voice, not to a story.</summary>
     public string? VoiceId { get; init; }
+
+    /// <summary>InstallVoice jobs only — what to install and under which name.</summary>
+    public VoiceInstallRequest? Install { get; init; }
 
     public JobState State { get; set; } = JobState.Queued;
     public string Stage { get; set; } = "";

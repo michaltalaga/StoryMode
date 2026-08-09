@@ -42,7 +42,19 @@ public sealed class ChatterboxOnnxProvider : ITtsProvider, IDisposable
         ],
         OutputSampleRate: 44100,
         AppliesWatermark: false,
-        SupportsVoiceCloning: true);
+        SupportsVoiceCloning: true,
+        StylePresets: StylePresets);
+
+    /// <summary>
+    /// Delivery settings as knob pairs. Higher exaggeration pushes emphasis and pace; lower cfg lets
+    /// the clone drift further from a flat read, so the two move in opposite directions.
+    /// </summary>
+    private static readonly IReadOnlyList<TtsStylePreset> StylePresets =
+    [
+        new(VoiceStyle.Calm, new Dictionary<string, double> { ["exaggeration"] = 0.35, ["cfg"] = 0.5 }),
+        new(VoiceStyle.Natural, new Dictionary<string, double> { ["exaggeration"] = 0.65, ["cfg"] = 0.3 }),
+        new(VoiceStyle.Lively, new Dictionary<string, double> { ["exaggeration"] = 0.9, ["cfg"] = 0.2 }),
+    ];
 
     public string Id => "chatterbox-onnx";
 

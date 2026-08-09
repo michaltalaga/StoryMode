@@ -3,9 +3,11 @@ namespace SessionStories.Core.Voices;
 using SessionStories.Core.Stories;
 
 /// <summary>
-/// The voice catalog is a machine/engine concern, not a story-world one: one global
-/// <c>library/voices.json</c> plus its reference wavs, shared by every universe. Same
-/// atomicity and ETag rules as <see cref="IStoryStore"/>.
+/// The catalog of voices this machine has <em>installed</em>. A voice is an installed artifact —
+/// a human name, a locale, a delivery style and whatever private assets its engine needed — not a
+/// hand-written config row: which engine backs it is an implementation detail the reader never sees.
+/// Global (an engine concern, not a story-world one): one <c>library/voices.json</c> plus its
+/// reference wavs, shared by every universe. Same atomicity and ETag rules as <see cref="IStoryStore"/>.
 /// </summary>
 public interface IVoiceStore
 {
@@ -21,27 +23,27 @@ public interface IVoiceStore
     /// <summary>Atomic write. Non-null <paramref name="expectedETag"/> enforces optimistic concurrency.</summary>
     void WriteCatalogFile(string text, string? expectedETag = null);
 
-    /// <summary>Absolute path of the entry's referenceWav under <see cref="VoicesRoot"/>; null when unset or missing on disk.</summary>
+    /// <summary>Absolute path of the voice's reference wav; null when it has none or it is missing on disk.</summary>
     string? ResolveReferenceWav(string voiceId);
 
-    /// <summary>library/voice-previews/&lt;voiceId&gt;.mp3 — a path, which may not exist yet.</summary>
+    /// <summary>library/voice-previews/&lt;voiceId&gt;.mp3 — the sample the play button streams.</summary>
     string PreviewPath(string voiceId);
 
     /// <summary>library/voice-cache/&lt;voiceId&gt; — conditionals derived from the reference wav; may not exist.</summary>
     string VoiceCachePath(string voiceId);
 
     /// <summary>
-    /// Creates the entry or overwrites its known fields (a null knob removes it). Returns true when
-    /// the voice did not exist before. <c>referenceWav</c> and any unknown JSON on the entry survive.
+    /// Creates or replaces the whole entry (an installer owns every field). Returns true when the
+    /// voice did not exist before. Hand-written JSON on the entry that we know nothing about survives.
     /// </summary>
-    bool WriteVoice(string voiceId, VoiceEntryEdit edit);
+    bool UpsertVoice(InstalledVoice voice);
 
     /// <summary>Applies only the non-null fields of <paramref name="edit"/>; false when the entry is absent.</summary>
-    bool PatchVoice(string voiceId, VoiceEntryEdit edit);
+    bool PatchVoice(string voiceId, VoiceEdit edit);
 
     /// <summary>
-    /// Removes the entry, its rendered preview and its conditionals cache, clearing the catalog
-    /// default when it pointed here. The shared reference wav stays unless
+    /// Removes the entry, its rendered sample and its conditionals cache, clearing the catalog
+    /// default when it pointed here. The reference wav may back several entries, so it stays unless
     /// <paramref name="deleteReferenceWav"/> says otherwise. False when the entry is absent.
     /// </summary>
     bool DeleteVoice(string voiceId, bool deleteReferenceWav = false);
@@ -50,30 +52,77 @@ public interface IVoiceStore
     bool SetDefaultVoice(string voiceId);
 
     /// <summary>
-    /// Writes library/voices/&lt;voiceId&gt;.wav from the stream, points the entry at it and drops the
-    /// derived artifacts (preview + conditionals cache), which would otherwise keep the old voice
-    /// alive. False when the entry is absent.
+    /// Writes library/voices/&lt;voiceId&gt;.wav from the stream and returns its bare file name, for an
+    /// installer to record in <see cref="InstalledVoice.EngineData"/>. Deliberately does not touch the
+    /// catalog: the wav is captured before the entry exists (upload and recording both land here first).
     /// </summary>
-    bool SaveReferenceWav(string voiceId, Stream wav);
+    string SaveReferenceWav(string voiceId, Stream wav);
+
+    /// <summary>
+    /// Drops the rendered sample and the conditionals cache. Both are derived from the reference wav
+    /// and the conditionals cache never re-reads its source, so replacing that wav without this would
+    /// leave the "new" voice sounding exactly like the old one.
+    /// </summary>
+    void InvalidateDerived(string voiceId);
 }
 
-public sealed record VoiceCatalog(IReadOnlyDictionary<string, VoiceEntry> Voices, string? Default);
-
-/// <summary>ReferenceWav is a bare file name relative to <see cref="IVoiceStore.VoicesRoot"/>.</summary>
-public sealed record VoiceEntry(
-    string Provider,
-    IReadOnlyList<string> Languages,
-    string ReferenceWav,
-    double? Exaggeration,
-    double? Cfg);
+public sealed record VoiceCatalog(IReadOnlyDictionary<string, InstalledVoice> Voices, string? Default);
 
 /// <summary>
-/// Fields to write onto a catalog entry. The meaning of null differs per operation:
-/// <see cref="IVoiceStore.WriteVoice"/> writes all four (null knob = remove the property),
-/// <see cref="IVoiceStore.PatchVoice"/> writes only the ones that are not null.
+/// One installed voice. <paramref name="Id"/> is the stable key that <c>session.&lt;variant&gt;.json</c>
+/// points at and is never shown to a reader; <paramref name="Name"/> is what the UI displays, so a
+/// voice can be renamed without breaking a single story.
 /// </summary>
-public sealed record VoiceEntryEdit(
-    string? Provider = null,
-    IReadOnlyList<string>? Languages = null,
-    double? Exaggeration = null,
-    double? Cfg = null);
+/// <param name="Locale">BCP-47, e.g. "en-US" or "pl-PL" — drives the flag and the language name.</param>
+/// <param name="Style">A <see cref="Tts.VoiceStyle"/> id; resolved to engine knobs only at render time.</param>
+/// <param name="EngineData">
+/// Engine-private settings, written by the installer that produced this voice and read only by that
+/// engine (piper: <c>bundle</c>; cloning engines: <c>referenceWav</c>). Nothing else may interpret it.
+/// </param>
+public sealed record InstalledVoice(
+    string Id,
+    string Name,
+    string Description,
+    string Locale,
+    string Style,
+    string EngineId,
+    IReadOnlyDictionary<string, string> EngineData,
+    VoiceProvenance? Source = null);
+
+/// <summary>Where a voice came from and on what terms — the licensing record travels with the voice.</summary>
+public sealed record VoiceProvenance(string Shelf, string License, string Attribution);
+
+/// <summary>The only fields a reader may change after install. Null means "leave alone".</summary>
+public sealed record VoiceEdit(string? Name = null, string? Description = null, string? Style = null);
+
+/// <summary>Locale helpers. Engines speak a bare language code; the catalog and UI speak BCP-47.</summary>
+public static class VoiceLocale
+{
+    /// <summary>"en-US" → "en". Anything already bare is returned lowercased.</summary>
+    public static string LanguageOf(string locale)
+    {
+        if (string.IsNullOrWhiteSpace(locale))
+            return "";
+        var dash = locale.IndexOfAny(['-', '_']);
+        return (dash < 0 ? locale : locale[..dash]).ToLowerInvariant();
+    }
+
+    /// <summary>"en-US" → "US" for flag lookup; empty when the locale carries no region.</summary>
+    public static string RegionOf(string locale)
+    {
+        if (string.IsNullOrWhiteSpace(locale))
+            return "";
+        var dash = locale.IndexOfAny(['-', '_']);
+        return dash < 0 || dash + 1 >= locale.Length ? "" : locale[(dash + 1)..].ToUpperInvariant();
+    }
+
+    /// <summary>Bare language codes are widened to the locale we actually ship (schema 1 migration).</summary>
+    public static string Normalize(string? locale) => (locale ?? "").Trim() switch
+    {
+        "" => "en-US",
+        "en" => "en-US",
+        "pl" => "pl-PL",
+        var value when value.Contains('_') => value.Replace('_', '-'),
+        var value => value,
+    };
+}

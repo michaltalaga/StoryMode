@@ -17,15 +17,18 @@ public sealed class JobRunnerService(
     JobRegistry registry,
     IStoryStore stories,
     IVoiceStore voices,
+    IVoiceGallery gallery,
+    IReadOnlyDictionary<string, IVoiceInstaller> installers,
     IStoryGenerator generator,
     Func<ISttProvider> sttFactory,
     IReadOnlyDictionary<string, Func<ITtsProvider>> ttsFactories,
+    IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities,
     SessionStoriesOptions options,
     ILogger<JobRunnerService> logger) : BackgroundService
 {
     private const string DefaultTtsProviderId = "chatterbox-onnx";
 
-    // Fixed preview copy, one per supported narration language (other languages get the English one).
+    // Fixed sample copy, one per supported narration language (other languages get the English one).
     private const string PreviewSampleEn =
         "The elder of Marrowfield did not offer them chairs. He spoke about the gem the way a man speaks about a debt he has decided not to pay.";
     private const string PreviewSamplePl =
@@ -84,6 +87,7 @@ public sealed class JobRunnerService(
         JobType.Verify => RunVerifyAsync(job, ct),
         JobType.RenderTts => RunRenderTtsAsync(job, ct),
         JobType.PreviewVoice => RunPreviewVoiceAsync(job, ct),
+        JobType.InstallVoice => RunInstallVoiceAsync(job, ct),
         _ => throw new InvalidOperationException($"Unknown job type {job.Type}."),
     };
 
@@ -192,16 +196,10 @@ public sealed class JobRunnerService(
         var voiceId = session.Voice ?? catalog?.Default
             ?? throw new InvalidOperationException(
                 $"No voice: session.{job.Variant}.json has no voice and library/voices.json has no default.");
+        var voice = RequireVoice(catalog, voiceId, job.Variant);
 
-        VoiceEntry? entry = null;
-        catalog?.Voices.TryGetValue(voiceId, out entry);
-
-        // Knobs: catalog defaults, overridden by the session's voiceOverrides.
-        var knobs = new Dictionary<string, double>();
-        if (entry?.Exaggeration is { } exaggeration)
-            knobs["exaggeration"] = exaggeration;
-        if (entry?.Cfg is { } cfg)
-            knobs["cfg"] = cfg;
+        // Knobs: the voice's named style, overridden by the session's voiceOverrides (files-on-disk wins).
+        var knobs = new Dictionary<string, double>(StyleKnobs(voice));
         foreach (var (name, value) in session.VoiceOverrides)
             knobs[name] = value;
 
@@ -213,25 +211,59 @@ public sealed class JobRunnerService(
         var outputPath = Path.Combine(stories.StoriesRoot, job.StoryId, "audio", $"{job.Variant}.mp3");
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
-        var request = new TtsRequest(text, session.Language, voiceId, outputPath, knobs);
+        var request = new TtsRequest(text, session.Language, voiceId, outputPath, knobs,
+            EngineData: voice.EngineData);
         var progress = new DelegateProgress<TtsProgress>(
             p => job.AppendLog($"tts {p.ChunkIndex}/{p.ChunkCount}: {p.Message}"));
 
-        var providerId = string.IsNullOrWhiteSpace(entry?.Provider) ? DefaultTtsProviderId : entry!.Provider;
-        if (!ttsFactories.TryGetValue(providerId, out var ttsFactory))
+        job.AppendLog($"voice '{voice.Name}' ({voice.Locale}, {voice.Style})");
+        await SynthesizeWithEngineAsync(job, voice, request, progress, ct);
+        job.AppendLog($"wrote audio/{job.Variant}.mp3");
+    }
+
+    /// <summary>
+    /// A story naming a voice that is not installed fails loudly. Substituting a different narrator
+    /// silently would be a worse outcome than the error — you would only find out by listening.
+    /// </summary>
+    private static InstalledVoice RequireVoice(VoiceCatalog? catalog, string voiceId, string variant)
+    {
+        if (catalog?.Voices.GetValueOrDefault(voiceId) is { } voice)
+            return voice;
+        var installed = catalog is null || catalog.Voices.Count == 0
+            ? "none are installed"
+            : "installed: " + string.Join(", ", catalog.Voices.Values.Select(v => $"{v.Name} ({v.Id})").Order());
+        throw new InvalidOperationException(
+            $"session.{variant}.json uses the voice '{voiceId}', which is not installed — {installed}. " +
+            "Add it under Settings → Voices, or point this story at a voice you have.");
+    }
+
+    /// <summary>Resolves the voice's named style to whatever knobs its engine actually has.</summary>
+    private IReadOnlyDictionary<string, double> StyleKnobs(InstalledVoice voice)
+    {
+        var presets = ttsCapabilities.GetValueOrDefault(voice.EngineId)?.StylePresets ?? [];
+        var preset = presets.FirstOrDefault(p => string.Equals(p.Id, voice.Style, StringComparison.OrdinalIgnoreCase))
+            ?? presets.FirstOrDefault(p => p.Id == VoiceStyle.Default);
+        return preset?.Knobs ?? new Dictionary<string, double>();
+    }
+
+    /// <summary>Constructs the voice's engine, renders, and always disposes it (VRAM residency).</summary>
+    private async Task SynthesizeWithEngineAsync(
+        JobRecord job, InstalledVoice voice, TtsRequest request,
+        IProgress<TtsProgress> progress, CancellationToken ct)
+    {
+        var engineId = string.IsNullOrWhiteSpace(voice.EngineId) ? DefaultTtsProviderId : voice.EngineId;
+        if (!ttsFactories.TryGetValue(engineId, out var ttsFactory))
         {
             throw new InvalidOperationException(
-                $"Voice '{voiceId}' wants TTS provider '{providerId}', which is not registered. " +
-                $"Registered: {string.Join(", ", ttsFactories.Keys)}.");
+                $"Voice '{voice.Name}' needs the '{engineId}' engine, which this build does not have. " +
+                $"Available: {string.Join(", ", ttsFactories.Keys)}.");
         }
-        job.AppendLog($"voice '{voiceId}' via provider '{providerId}'");
 
-        var referenceWav = voices.ResolveReferenceWav(voiceId);
+        var referenceWav = voices.ResolveReferenceWav(voice.Id);
         var tts = ttsFactory();
         try
         {
-            await SynthesizePreparingIfNeededAsync(job, tts, request, progress, voiceId, referenceWav, ct);
-            job.AppendLog($"wrote audio/{job.Variant}.mp3");
+            await SynthesizePreparingIfNeededAsync(job, tts, request, progress, voice.Id, referenceWav, ct);
         }
         finally
         {
@@ -239,53 +271,92 @@ public sealed class JobRunnerService(
         }
     }
 
+    /// <summary>Re-records an installed voice's sample. Not what the play button does — see EnsureSampleAsync.</summary>
     private async Task RunPreviewVoiceAsync(JobRecord job, CancellationToken ct)
     {
-        job.Stage = "preview";
+        job.Stage = "sample";
         var voiceId = job.VoiceId
             ?? throw new InvalidOperationException("PreviewVoice job has no voiceId.");
 
-        var entry = voices.ReadCatalog()?.Voices.GetValueOrDefault(voiceId)
-            ?? throw new InvalidOperationException($"Voice '{voiceId}' is not in library/voices.json.");
+        var voice = voices.ReadCatalog()?.Voices.GetValueOrDefault(voiceId)
+            ?? throw new InvalidOperationException($"Voice '{voiceId}' is not installed.");
 
-        var language = entry.Languages.FirstOrDefault() ?? "en";
-        var text = language.StartsWith("pl", StringComparison.OrdinalIgnoreCase) ? PreviewSamplePl : PreviewSampleEn;
+        await RenderSampleAsync(job, voice, ct);
+    }
 
-        var knobs = new Dictionary<string, double>();
-        if (entry.Exaggeration is { } exaggeration)
-            knobs["exaggeration"] = exaggeration;
-        if (entry.Cfg is { } cfg)
-            knobs["cfg"] = cfg;
+    private async Task RunInstallVoiceAsync(JobRecord job, CancellationToken ct)
+    {
+        var request = job.Install
+            ?? throw new InvalidOperationException("InstallVoice job has no install request.");
 
-        var outputPath = voices.PreviewPath(voiceId);
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-        // Atomic: render to a scratch file so a failed or cancelled render never half-replaces a good preview.
-        var tempPath = outputPath + ".tmp";
-
-        var request = new TtsRequest(text, language, voiceId, tempPath, knobs);
-        var progress = new DelegateProgress<TtsProgress>(
-            p => job.AppendLog($"preview {p.ChunkIndex}/{p.ChunkCount}: {p.Message}"));
-
-        var providerId = string.IsNullOrWhiteSpace(entry.Provider) ? DefaultTtsProviderId : entry.Provider;
-        if (!ttsFactories.TryGetValue(providerId, out var ttsFactory))
+        if (!installers.TryGetValue(request.Plan.EngineId, out var installer))
         {
             throw new InvalidOperationException(
-                $"Voice '{voiceId}' wants TTS provider '{providerId}', which is not registered. " +
-                $"Registered: {string.Join(", ", ttsFactories.Keys)}.");
+                $"'{request.Name}' needs the '{request.Plan.EngineId}' engine, which this build cannot install. " +
+                $"Available: {string.Join(", ", installers.Keys)}.");
         }
-        job.AppendLog($"preview of voice '{voiceId}' ({language}) via provider '{providerId}'");
 
-        var referenceWav = voices.ResolveReferenceWav(voiceId);
-        var tts = ttsFactory();
+        job.Stage = "install";
+        job.AppendLog($"installing '{request.Name}' ({request.Locale})");
+        var voice = await installer.InstallAsync(request, new DelegateProgress<string>(job.AppendLog), ct);
+        voices.UpsertVoice(voice);
+
+        // The invariant that makes play instant: an install is not finished until the voice has a
+        // sample on disk. Doing it here, inside the progress bar, is why the play button never waits.
+        job.Stage = "sample";
+        await EnsureSampleAsync(job, voice, request, ct);
+
+        // First voice on a fresh machine becomes the default, so a story can render before anyone
+        // has visited Settings.
+        if (string.IsNullOrEmpty(voices.ReadCatalog()?.Default))
+            voices.SetDefaultVoice(voice.Id);
+
+        job.AppendLog($"'{voice.Name}' is ready");
+    }
+
+    /// <summary>
+    /// Shelf voices ship with a sample rendered by the real engine, so installing one is a copy.
+    /// Only a voice made from the reader's own recording has no sample yet, and that renders here.
+    /// </summary>
+    private async Task EnsureSampleAsync(
+        JobRecord job, InstalledVoice voice, VoiceInstallRequest request, CancellationToken ct)
+    {
+        if (request.Source?.Shelf is { Length: > 0 } shelfKey && gallery.SamplePath(shelfKey) is { } shipped)
+        {
+            var destination = voices.PreviewPath(voice.Id);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(shipped, destination, overwrite: true);
+            job.AppendLog("sample ready");
+            return;
+        }
+
+        job.AppendLog("recording a sample of the new voice");
+        await RenderSampleAsync(job, voice, ct);
+    }
+
+    private async Task RenderSampleAsync(JobRecord job, InstalledVoice voice, CancellationToken ct)
+    {
+        var language = VoiceLocale.LanguageOf(voice.Locale);
+        var text = language.StartsWith("pl", StringComparison.OrdinalIgnoreCase) ? PreviewSamplePl : PreviewSampleEn;
+
+        var outputPath = voices.PreviewPath(voice.Id);
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        // Atomic: render to a scratch file so a failed or cancelled render never half-replaces a good sample.
+        var tempPath = outputPath + ".tmp";
+
+        var request = new TtsRequest(text, language, voice.Id, tempPath, StyleKnobs(voice),
+            EngineData: voice.EngineData);
+        var progress = new DelegateProgress<TtsProgress>(
+            p => job.AppendLog($"sample {p.ChunkIndex}/{p.ChunkCount}: {p.Message}"));
+
         try
         {
-            await SynthesizePreparingIfNeededAsync(job, tts, request, progress, voiceId, referenceWav, ct);
+            await SynthesizeWithEngineAsync(job, voice, request, progress, ct);
             File.Move(tempPath, outputPath, overwrite: true);
-            job.AppendLog($"wrote voice-previews/{voiceId}.mp3");
+            job.AppendLog($"wrote voice-previews/{voice.Id}.mp3");
         }
         finally
         {
-            (tts as IDisposable)?.Dispose();
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }

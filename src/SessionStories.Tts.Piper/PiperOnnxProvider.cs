@@ -25,7 +25,8 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
     /// have no reason to build a provider just to read a constant.
     /// </summary>
     public static TtsCapabilities DescribeCapabilities(PiperOptions options) => new(
-        Languages: [.. options.VoiceModels.Values
+        // What piper can speak here is exactly what has been installed: one bundle per trained voice.
+        Languages: [.. InstalledBundles(options)
             .Select(LanguageFromBundle)
             .OfType<string>()
             .Distinct()
@@ -34,7 +35,25 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
         OutputSampleRate: 44100,
         AppliesWatermark: false,
         // Fixed trained VITS models — PrepareVoiceAsync is a no-op and a reference wav is ignored.
-        SupportsVoiceCloning: false);
+        SupportsVoiceCloning: false,
+        StylePresets: StylePresets);
+
+    /// <summary>
+    /// Piper has no expressiveness control at all — only speed. The same three names therefore mean
+    /// something much narrower here than for a cloning engine, which is precisely why the numbers
+    /// stay behind the preset: the reader picks a delivery, not an engine parameter.
+    /// </summary>
+    private static readonly IReadOnlyList<TtsStylePreset> StylePresets =
+    [
+        new(VoiceStyle.Calm, new Dictionary<string, double> { ["speed"] = 0.92 }),
+        new(VoiceStyle.Natural, new Dictionary<string, double> { ["speed"] = 1.0 }),
+        new(VoiceStyle.Lively, new Dictionary<string, double> { ["speed"] = 1.08 }),
+    ];
+
+    private static IEnumerable<string> InstalledBundles(PiperOptions options)
+        => Directory.Exists(options.ModelsRoot)
+            ? Directory.EnumerateDirectories(options.ModelsRoot).Select(Path.GetFileName).OfType<string>()
+            : [];
 
     /// <summary>Piper voices are fixed trained models — there is nothing to prepare or cache.</summary>
     public Task PrepareVoiceAsync(string referenceWavPath, string voiceId, CancellationToken ct = default)
@@ -45,7 +64,7 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
 
     private void SynthesizeCore(TtsRequest request, IProgress<TtsProgress>? progress, CancellationToken ct)
     {
-        var bundleDir = ResolveBundleDir(request.VoiceId, out var bundleName);
+        var bundleDir = ResolveBundleDir(request, out var bundleName);
 
         var language = request.Language.ToLowerInvariant();
         if (LanguageFromBundle(bundleName) is { } bundleLanguage && bundleLanguage != language)
@@ -98,22 +117,26 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
         progress?.Report(new TtsProgress(chunks.Count, chunks.Count, "Encoding complete"));
     }
 
-    private string ResolveBundleDir(string voiceId, out string bundleName)
+    private string ResolveBundleDir(TtsRequest request, out string bundleName)
     {
-        if (!options.VoiceModels.TryGetValue(voiceId, out var name))
+        // Written by PiperVoiceInstaller at install time and carried on the voice itself.
+        if (request.EngineData?.GetValueOrDefault("bundle") is not { Length: > 0 } name)
         {
             throw new InvalidOperationException(
-                $"Voice '{voiceId}' is not configured for provider '{Id}'. " +
-                $"Configured voices: {string.Join(", ", options.VoiceModels.Keys.Order())}.");
+                $"Voice '{request.VoiceId}' has no piper bundle recorded. It predates installable " +
+                "voices — remove it in Settings and add it again from the voice list.");
         }
+        // A bundle name is a folder under the models root; it may not point anywhere else.
+        if (Path.GetFileName(name) != name)
+            throw new InvalidOperationException($"Invalid piper bundle name '{name}' on voice '{request.VoiceId}'.");
 
         bundleName = name;
         var dir = Path.Combine(options.ModelsRoot, name);
         if (!Directory.Exists(dir))
         {
             throw new DirectoryNotFoundException(
-                $"Piper bundle '{name}' for voice '{voiceId}' not found at '{dir}'. " +
-                "Run scripts/download-models.ps1.");
+                $"Piper bundle '{name}' for voice '{request.VoiceId}' is not on disk at '{dir}'. " +
+                "Remove the voice in Settings and add it again to re-download it.");
         }
         return dir;
     }

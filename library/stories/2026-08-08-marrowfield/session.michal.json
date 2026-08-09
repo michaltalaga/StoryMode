@@ -7,7 +7,7 @@
   "pov": "corin",
   "tone": "",
   "targetMinutes": 12,
-  "voice": "narrator-en-dry",
+  "voice": "narrator",
   "voiceOverrides": {},
   "sources": {
     "primary": ["michal.txt"],

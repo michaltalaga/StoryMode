@@ -2,12 +2,11 @@ namespace SessionStories.Tts.Piper;
 
 public sealed record PiperOptions
 {
-    /// <summary>Directory containing the sherpa-onnx piper bundles (e.g. &lt;repo&gt;\models\piper).</summary>
-    public required string ModelsRoot { get; init; }
-
     /// <summary>
-    /// Catalog voice id → bundle folder name under <see cref="ModelsRoot"/>
-    /// (e.g. "narrator-pl-gosia" → "vits-piper-pl_PL-gosia-medium").
+    /// Directory containing the sherpa-onnx piper bundles (e.g. &lt;repo&gt;\models\piper). Which bundle
+    /// a voice uses is recorded on the voice itself (<c>engineData.bundle</c>), written by the
+    /// installer — it is deliberately not configured here, because a voice you cannot add without
+    /// editing appsettings is a voice the app cannot really offer.
     /// </summary>
-    public required IReadOnlyDictionary<string, string> VoiceModels { get; init; }
+    public required string ModelsRoot { get; init; }
 }

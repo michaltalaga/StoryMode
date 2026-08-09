@@ -171,16 +171,25 @@ export function uploadRecollection(
   );
 }
 
-/** POST library/voices/<id>.wav; the server also drops the stale preview + conditionals cache. */
-export function uploadVoiceReference(
-  voiceId: string,
+/**
+ * Turns a recording of someone speaking into a new voice. Returns the install job to watch —
+ * the voice only exists once that job finishes, because that is what also produces its sample.
+ */
+export function uploadVoiceRecording(
+  name: string,
+  locale: string,
   file: File,
   onProgress: (pct: number) => void,
-): Promise<void> {
-  return uploadFile(`/api/voices/${encodeURIComponent(voiceId)}/reference`, file, onProgress);
+): Promise<{ jobId: string; voiceId: string }> {
+  return uploadFile('/api/voices/from-recording', file, onProgress, { name, locale });
 }
 
-function uploadFile(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+function uploadFile<T = void>(
+  url: string,
+  file: File,
+  onProgress: (pct: number) => void,
+  fields?: Record<string, string>,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
@@ -193,7 +202,7 @@ function uploadFile(url: string, file: File, onProgress: (pct: number) => void):
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress(100);
-        resolve();
+        resolve((xhr.responseText ? JSON.parse(xhr.responseText) : undefined) as T);
         return;
       }
       let message = xhr.statusText || `HTTP ${xhr.status}`;
@@ -211,6 +220,7 @@ function uploadFile(url: string, file: File, onProgress: (pct: number) => void):
     const form = new FormData();
     // Field name must be "file" — it binds to the IFormFile parameter.
     form.append('file', file, file.name);
+    for (const [key, value] of Object.entries(fields ?? {})) form.append(key, value);
     xhr.send(form);
   });
 }
@@ -227,7 +237,16 @@ export function recollectionUrl(storyId: string, file: string): string {
   return `/api/stories/${encodeURIComponent(storyId)}/recollections/${encodeURIComponent(file)}`;
 }
 
-/** Rendered voice preview (library/voice-previews/<id>.mp3); 404 until a preview job ran. */
+/**
+ * An installed voice's sample. Always a plain static file: installing a voice is what
+ * puts it there, so playing one never has to wait for a render.
+ */
 export function voicePreviewUrl(voiceId: string): string {
   return `/api/voices/${encodeURIComponent(voiceId)}/preview`;
+}
+
+/** A shelf voice's sample — shipped pre-rendered, so you can audition before downloading. */
+export function voiceOfferSampleUrl(key: string): string {
+  // The key carries a slash ("piper/pl_PL-gosia"); the route is a catch-all, so keep it.
+  return `/api/voice-gallery/sample/${key.split('/').map(encodeURIComponent).join('/')}`;
 }

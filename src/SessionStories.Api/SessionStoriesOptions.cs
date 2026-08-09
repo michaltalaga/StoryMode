@@ -7,6 +7,12 @@ public sealed class SessionStoriesOptions
 {
     public string LibraryRoot { get; set; } = "";
     public string RepoRoot { get; private set; } = "";
+
+    /// <summary>
+    /// The curated shelf of installable voices. App content, so it lives with the code rather than in
+    /// the reader's library — it is versioned alongside the engines that know how to install it.
+    /// </summary>
+    public string GalleryRoot { get; set; } = "";
     public WhisperOptions Whisper { get; set; } = new();
     public TtsOptions Tts { get; set; } = new();
     public PiperOptions Piper { get; set; } = new();
@@ -27,7 +33,6 @@ public sealed class SessionStoriesOptions
     public sealed class PiperOptions
     {
         public string ModelsRoot { get; set; } = "";
-        public Dictionary<string, string> VoiceModels { get; set; } = [];
     }
 
     public sealed class ClaudeOptions
@@ -49,6 +54,8 @@ public sealed class SessionStoriesOptions
         [JobType.Verify] = 10,
         [JobType.RenderTts] = 60,
         [JobType.PreviewVoice] = 10,
+        // A shelf install is a download plus a copy; an uploaded voice also pays one conditioning pass.
+        [JobType.InstallVoice] = 20,
     };
 
     public TimeSpan TimeoutFor(JobType type)
@@ -66,12 +73,7 @@ public sealed class SessionStoriesOptions
         Tts.ModelDir = ResolvePath(Tts.ModelDir, Path.Combine(RepoRoot, "models", "chatterbox"));
         Tts.VoiceCacheDir = ResolvePath(Tts.VoiceCacheDir, Path.Combine(LibraryRoot, "voice-cache"));
         Piper.ModelsRoot = ResolvePath(Piper.ModelsRoot, Path.Combine(RepoRoot, "models", "piper"));
-        if (Piper.VoiceModels.Count == 0)
-        {
-            Piper.VoiceModels["narrator-pl-dom"] = "vits-piper-pl_PL-gosia-medium";
-            Piper.VoiceModels["narrator-pl-gosia"] = "vits-piper-pl_PL-gosia-medium";
-            Piper.VoiceModels["narrator-pl-darkman"] = "vits-piper-pl_PL-darkman-medium";
-        }
+        GalleryRoot = ResolvePath(GalleryRoot, Path.Combine(RepoRoot, "voice-gallery"));
 
         foreach (var (type, minutes) in DefaultTimeouts)
             Jobs.TimeoutMinutes.TryAdd(type, minutes);

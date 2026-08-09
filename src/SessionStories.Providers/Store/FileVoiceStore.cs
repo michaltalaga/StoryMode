@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using SessionStories.Core.Stories;
+using SessionStories.Core.Tts;
 using SessionStories.Core.Voices;
 
 namespace SessionStories.Providers.Store;
@@ -11,10 +12,20 @@ namespace SessionStories.Providers.Store;
 /// <c>voices/</c> (reference wavs), <c>voice-previews/</c> (rendered samples) and
 /// <c>voice-cache/</c> (conditionals derived from a reference wav). Same ETag + atomic-write
 /// rules as the story store; structured edits round-trip through <see cref="JsonNode"/> so
-/// hand-written fields (<c>_notes</c>, future knobs) survive.
+/// hand-written fields (<c>_notes</c>, future settings) survive.
+/// <para>
+/// Reads accept both schemas. Schema 1 entries — <c>provider</c>/<c>languages</c>/<c>referenceWav</c>
+/// plus raw <c>exaggeration</c>/<c>cfg</c> knobs — are mapped to the installed-voice model in memory,
+/// and any structured write converges that entry to schema 2. A read never rewrites the file.
+/// </para>
 /// </summary>
 public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = null) : IVoiceStore
 {
+    /// <summary>Schema 1 had no engine field, so its presence is the discriminator.</summary>
+    public const int CurrentSchema = 2;
+
+    private const string DefaultEngineId = "chatterbox-onnx";
+
     private static readonly JsonDocumentOptions TolerantJson =
         new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
@@ -39,24 +50,12 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
         if (ReadRoot() is not { } root)
             return null;
 
-        var voices = new Dictionary<string, VoiceEntry>(StringComparer.Ordinal);
+        var voices = new Dictionary<string, InstalledVoice>(StringComparer.Ordinal);
         if (root["voices"] is JsonObject entries)
-            foreach (var (name, node) in entries)
-            {
-                if (node is not JsonObject entry)
-                    continue;
-                var languages = new List<string>();
-                if (entry["languages"] is JsonArray langs)
-                    foreach (var lang in langs)
-                        if (lang is JsonValue lv && lv.TryGetValue<string>(out var s))
-                            languages.Add(s);
-                voices[name] = new VoiceEntry(
-                    GetString(entry, "provider") ?? "",
-                    languages,
-                    GetString(entry, "referenceWav") ?? "",
-                    GetDouble(entry, "exaggeration"),
-                    GetDouble(entry, "cfg"));
-            }
+            foreach (var (id, node) in entries)
+                if (node is JsonObject entry)
+                    voices[id] = ParseEntry(id, entry);
+
         return new VoiceCatalog(voices, GetString(root, "default"));
     }
 
@@ -72,11 +71,11 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
 
     public string? ResolveReferenceWav(string voiceId)
     {
-        var entry = ReadCatalog()?.Voices.GetValueOrDefault(voiceId);
-        if (entry is null || entry.ReferenceWav.Length == 0)
+        var voice = ReadCatalog()?.Voices.GetValueOrDefault(voiceId);
+        if (voice is null || !voice.EngineData.TryGetValue("referenceWav", out var configured))
             return null;
         // Bare file name relative to library/voices — a catalog entry may not name anything outside it.
-        var name = Path.GetFileName(entry.ReferenceWav);
+        var name = Path.GetFileName(configured);
         if (name.Length == 0)
             return null;
         var path = Path.Combine(VoicesRoot, name);
@@ -89,42 +88,57 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
 
     // ---- structured catalog edits --------------------------------------------------------
 
-    public bool WriteVoice(string voiceId, VoiceEntryEdit edit)
+    public bool UpsertVoice(InstalledVoice voice)
     {
-        SafeVoiceId(voiceId);
+        SafeVoiceId(voice.Id);
         var root = ReadRoot() ?? new JsonObject();
         var voices = RequireObject(root, "voices");
-        var created = voices[voiceId] is not JsonObject;
-        var entry = RequireObject(voices, voiceId);
+        var created = voices[voice.Id] is not JsonObject;
+        // Mutate the existing object so hand-written fields we know nothing about survive.
+        var entry = RequireObject(voices, voice.Id);
 
-        // Replace semantics: every known field is written, a null knob drops the property.
-        // referenceWav and anything hand-written on the entry are deliberately left alone.
-        entry["provider"] = edit.Provider ?? GetString(entry, "provider") ?? "";
-        entry["languages"] = ToArray(edit.Languages ?? []);
-        SetOrRemove(entry, "exaggeration", edit.Exaggeration);
-        SetOrRemove(entry, "cfg", edit.Cfg);
+        entry["name"] = voice.Name;
+        entry["description"] = voice.Description;
+        entry["locale"] = voice.Locale;
+        entry["style"] = voice.Style;
+        entry["engine"] = voice.EngineId;
+        entry["engineData"] = ToObject(voice.EngineData);
+        if (voice.Source is { } source)
+            entry["source"] = new JsonObject
+            {
+                ["shelf"] = source.Shelf,
+                ["license"] = source.License,
+                ["attribution"] = source.Attribution,
+            };
+        else
+            entry.Remove("source");
 
+        // Schema 1 leftovers on this entry: their meaning now lives in engine/locale/style/engineData,
+        // so leaving them would give one voice two contradictory sources of truth.
+        foreach (var legacy in LegacyEntryFields)
+            entry.Remove(legacy);
+
+        root["schema"] = CurrentSchema;
         WriteRoot(root);
         return created;
     }
 
-    public bool PatchVoice(string voiceId, VoiceEntryEdit edit)
+    public bool PatchVoice(string voiceId, VoiceEdit edit)
     {
         SafeVoiceId(voiceId);
         var root = ReadRoot();
         if (root?["voices"] is not JsonObject voices || voices[voiceId] is not JsonObject entry)
             return false;
 
-        if (edit.Provider is { } provider)
-            entry["provider"] = provider;
-        if (edit.Languages is { } languages)
-            entry["languages"] = ToArray(languages);
-        if (edit.Exaggeration is { } exaggeration)
-            entry["exaggeration"] = exaggeration;
-        if (edit.Cfg is { } cfg)
-            entry["cfg"] = cfg;
-
-        WriteRoot(root!);
+        // Read through the same migration as everything else, then write the whole entry back:
+        // a schema 1 row converges to schema 2 rather than growing a "name" on top of "provider".
+        var current = ParseEntry(voiceId, entry);
+        UpsertVoice(current with
+        {
+            Name = string.IsNullOrWhiteSpace(edit.Name) ? current.Name : edit.Name.Trim(),
+            Description = edit.Description?.Trim() ?? current.Description,
+            Style = edit.Style is null ? current.Style : VoiceStyle.Normalize(edit.Style),
+        });
         return true;
     }
 
@@ -135,14 +149,14 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
         if (root?["voices"] is not JsonObject voices || voices[voiceId] is not JsonObject entry)
             return false;
 
-        var wavName = Path.GetFileName(GetString(entry, "referenceWav") ?? "");
+        var wavName = Path.GetFileName(ParseEntry(voiceId, entry).EngineData.GetValueOrDefault("referenceWav", ""));
         voices.Remove(voiceId);
         // A dangling default would break every render that falls back to it.
         if (string.Equals(GetString(root!, "default"), voiceId, StringComparison.Ordinal))
             root!["default"] = null;
         WriteRoot(root!);
 
-        DeleteDerived(voiceId);
+        InvalidateDerived(voiceId);
         if (deleteReferenceWav && wavName.Length > 0)
             TryDeleteFile(Path.Combine(VoicesRoot, wavName));
         return true;
@@ -159,13 +173,9 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
         return true;
     }
 
-    public bool SaveReferenceWav(string voiceId, Stream wav)
+    public string SaveReferenceWav(string voiceId, Stream wav)
     {
         SafeVoiceId(voiceId);
-        var root = ReadRoot();
-        if (root?["voices"] is not JsonObject voices || voices[voiceId] is not JsonObject entry)
-            return false;
-
         Directory.CreateDirectory(VoicesRoot);
         var fileName = voiceId + ".wav";
         var path = Path.Combine(VoicesRoot, fileName);
@@ -174,18 +184,11 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
             wav.CopyTo(file);
         File.Move(tmp, path, overwrite: true);
 
-        entry["referenceWav"] = fileName;
-        WriteRoot(root!);
-
-        // The conditionals cache never re-reads its source wav, and the preview was rendered from
-        // the old one — both must go or the "new" voice would keep sounding like the old one.
-        DeleteDerived(voiceId);
-        return true;
+        InvalidateDerived(voiceId);
+        return fileName;
     }
 
-    // ---- private helpers ----------------------------------------------------------------
-
-    private void DeleteDerived(string voiceId)
+    public void InvalidateDerived(string voiceId)
     {
         TryDeleteFile(PreviewPath(voiceId));
         var cache = VoiceCachePath(voiceId);
@@ -199,6 +202,81 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
             // A render may hold the files open; the catalog edit still stands.
         }
     }
+
+    // ---- parsing / migration -------------------------------------------------------------
+
+    private static readonly string[] LegacyEntryFields =
+        ["provider", "languages", "referenceWav", "exaggeration", "cfg"];
+
+    /// <summary>Reads either schema into the installed-voice model. Never writes.</summary>
+    private static InstalledVoice ParseEntry(string id, JsonObject entry)
+    {
+        var engineData = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (entry["engineData"] is JsonObject data)
+            foreach (var (key, node) in data)
+                if (node is JsonValue value && value.TryGetValue<string>(out var text))
+                    engineData[key] = text;
+
+        var isSchema2 = GetString(entry, "engine") is not null;
+        if (!isSchema2)
+        {
+            // Schema 1: the reference wav was a first-class field, and knobs were raw numbers.
+            if (GetString(entry, "referenceWav") is { Length: > 0 } wav)
+                engineData["referenceWav"] = wav;
+        }
+
+        var locale = isSchema2
+            ? VoiceLocale.Normalize(GetString(entry, "locale"))
+            : VoiceLocale.Normalize(FirstLanguage(entry));
+
+        return new InstalledVoice(
+            Id: id,
+            Name: GetString(entry, "name") is { Length: > 0 } name ? name : HumanizeId(id),
+            Description: GetString(entry, "description") ?? "",
+            Locale: locale,
+            Style: isSchema2
+                ? VoiceStyle.Normalize(GetString(entry, "style"))
+                : StyleFromLegacyKnobs(GetDouble(entry, "exaggeration")),
+            EngineId: GetString(entry, "engine") is { Length: > 0 } engine ? engine
+                : GetString(entry, "provider") is { Length: > 0 } provider ? provider
+                : DefaultEngineId,
+            EngineData: engineData,
+            Source: ParseProvenance(entry));
+    }
+
+    private static VoiceProvenance? ParseProvenance(JsonObject entry)
+        => entry["source"] is JsonObject source
+            ? new VoiceProvenance(
+                GetString(source, "shelf") ?? "",
+                GetString(source, "license") ?? "",
+                GetString(source, "attribution") ?? "")
+            : null;
+
+    private static string? FirstLanguage(JsonObject entry)
+    {
+        if (entry["languages"] is not JsonArray langs)
+            return null;
+        foreach (var lang in langs)
+            if (lang is JsonValue value && value.TryGetValue<string>(out var s) && s.Length > 0)
+                return s;
+        return null;
+    }
+
+    /// <summary>Schema 1 stored raw exaggeration; map it onto the nearest named style.</summary>
+    private static string StyleFromLegacyKnobs(double? exaggeration) => exaggeration switch
+    {
+        null => VoiceStyle.Default,
+        < 0.5 => VoiceStyle.Calm,
+        < 0.8 => VoiceStyle.Natural,
+        _ => VoiceStyle.Lively,
+    };
+
+    /// <summary>"narrator-pl-gosia" → "Narrator Pl Gosia". Only ever a starting point — it is renamable.</summary>
+    private static string HumanizeId(string id)
+        => string.Join(' ', id.Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Length <= 1 ? part.ToUpperInvariant() : char.ToUpperInvariant(part[0]) + part[1..]));
+
+    // ---- private helpers ----------------------------------------------------------------
 
     private static void TryDeleteFile(string path)
     {
@@ -236,20 +314,12 @@ public sealed class FileVoiceStore(string libraryRoot, string? voiceCacheDir = n
         return created;
     }
 
-    private static JsonArray ToArray(IEnumerable<string> values)
+    private static JsonObject ToObject(IReadOnlyDictionary<string, string> values)
     {
-        var array = new JsonArray();
-        foreach (var value in values)
-            array.Add(value);
-        return array;
-    }
-
-    private static void SetOrRemove(JsonObject entry, string name, double? value)
-    {
-        if (value is { } number)
-            entry[name] = number;
-        else
-            entry.Remove(name);
+        var obj = new JsonObject();
+        foreach (var (key, value) in values)
+            obj[key] = value;
+        return obj;
     }
 
     private static string SafeVoiceId(string voiceId)

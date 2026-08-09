@@ -212,8 +212,9 @@ export const pl: Strings = {
   statusClaude: 'Claude CLI',
   statusGpu: 'Karta graficzna',
   statusModels: 'Modele',
-  statusWhisper: 'Whisper (spisywanie)',
-  statusChatterbox: 'Chatterbox (lektor)',
+  /** Named by what they do, not what they are — the brand helps nobody decide anything. */
+  statusWhisper: 'Model spisywania',
+  statusChatterbox: 'Model lektora',
   statusLibraryRoot: 'Folder biblioteki',
   statusFound: 'Dostępny',
   statusMissing: 'Brak',
@@ -428,66 +429,104 @@ export const pl: Strings = {
   languageNameEn: 'English',
   languageNamePl: 'Polski',
 
-  // --- Settings: voices (global catalog) ---
+  // --- Settings: voices ---
   settingsVoicesHeading: 'Głosy',
-  settingsVoicesHint:
-    'Katalog głosów jest wspólny dla wszystkich światów. Posłuchaj głosu, zanim powierzysz mu opowieść.',
-  /** What the play button actually reads out. */
-  voicesSampleHint: 'Próbka czyta jedno stałe zdanie w języku danego głosu.',
-  voicesEmpty: 'Brak zdefiniowanych głosów',
-  voicesEmptyHint: 'Dodaj pierwszy przyciskiem „Dodaj głos”.',
-  voicesLoadError: 'Nie udało się pobrać listy głosów.',
+  settingsVoicesHint: 'Każdą opowieść czyta jeden z nich. Naciśnij odtwarzanie, żeby posłuchać.',
+  voicesEmpty: 'Nie masz jeszcze głosów',
+  voicesEmptyHint: 'Dodaj pierwszy — narrator wbudowany jest na liście.',
+  voicesLoadError: 'Nie udało się pobrać Twoich głosów.',
   voicesDefaultBadge: 'domyślny',
-  voicesNoReferenceWav: 'brak nagrania wzorcowego',
-  /** Plain-language capability, derived from what the engine can do (supportsCloning). */
-  voicesCloned: 'głos klonowany',
-  voicesBuiltIn: 'głos wbudowany',
-  voicesPlay: 'Odsłuchaj próbkę',
+  voicesPlay: 'Odtwórz',
   voicesStop: 'Zatrzymaj',
-  voicesPreparing: 'przygotowuję…',
-  voicesReadyToPlay: 'Gotowe — dotknij, aby odtworzyć',
-  voicesPreviewError: 'Nie udało się przygotować próbki.',
-  voicesDetails: 'Szczegóły',
-  voicesEngineLabel: 'Silnik',
-  voicesExaggerationLabel: 'Ekspresja (exaggeration)',
-  voicesCfgLabel: 'Prowadzenie (cfg)',
-  voicesReferenceFileLabel: 'Nagranie wzorcowe',
+  voicesNoSample: 'brak próbki',
+  voicesSampleError: 'Nie udało się odtworzyć próbki.',
+  /** Locale names. The flag carries the country, so these name the language. */
+  localeEnUs: 'angielski (USA)',
+  localeEnGb: 'angielski (Wielka Brytania)',
+  localePlPl: 'polski',
+  /** Named deliveries. The reader picks one of these; the numbers behind them never surface. */
+  voiceStyleCalm: 'Spokojnie',
+  voiceStyleNatural: 'Naturalnie',
+  voiceStyleLively: 'Żywo',
+  voicesStyleLabel: 'Sposób czytania',
   voicesRerecord: 'Nagraj próbkę jeszcze raz',
   voicesSetDefault: 'Ustaw jako domyślny',
-  voicesReplaceReference: 'Zmień nagranie wzorcowe',
-  /** The ⋯ button on a card, and the sheet it opens. {name} is the voice id. */
+  voicesRename: 'Zmień nazwę',
+  /** The ⋯ button on a row, and the sheet it opens. {name} is the voice name. */
   voicesMenuOpen: 'Więcej działań — {name}',
-  voicesMenuTitle: 'Działania dla głosu',
-  voicesAdd: 'Dodaj głos',
-  voicesAddTitle: 'Nowy głos',
-  voicesAddDescription:
-    'Nazwa, silnik i co najmniej jeden język. Nagranie wzorcowe możesz dodać od razu.',
-  voicesEditTitle: 'Edytuj głos',
-  voicesEditDescription: 'Nazwa zostaje bez zmian — po niej opowieści rozpoznają głos.',
+  voicesMenuTitle: 'Głos',
+  voicesRenameTitle: 'Zmień nazwę głosu',
+  voicesRenameHint: 'Zmienia się tylko wyświetlana nazwa — opowieści działają dalej.',
   voicesNameLabel: 'Nazwa',
-  voicesNamePlaceholder: 'np. narrator-pl-babcia',
-  voicesNameInvalid: 'Nazwa: małe litery, cyfry i myślniki.',
-  voicesNameTaken: 'Głos o tej nazwie już istnieje.',
-  voicesEngineHint: 'Silniki klonujące kopiują nagranie wzorcowe; pozostałe mają głosy stałe.',
-  voicesLanguagesLabel: 'Języki',
-  voicesLanguagesRequired: 'Wybierz co najmniej jeden język.',
-  voicesKnobsHint: 'Używa ich tylko część silników — w razie wątpliwości zostaw puste.',
-  voicesKnobInvalid: 'Ekspresja i prowadzenie muszą być liczbami.',
-  voicesReferenceLabel: 'Nagranie wzorcowe (.wav)',
-  voicesReferenceHint: 'Silnik kopiuje ten głos. Nowe nagranie zastąpi próbkę zrobioną ze starego.',
-  /** Shown instead of the upload field when the chosen engine has fixed voices. */
-  voicesReferenceUnsupported: 'Ten silnik ma stałe, wytrenowane głosy — ignoruje nagranie wzorcowe.',
-  voicesWavOnly: 'Przyjmowane są tylko pliki .wav.',
+  voicesNameRequired: 'Nadaj głosowi nazwę.',
   voicesDeleteTitle: 'Usunąć ten głos?',
-  /** {name} is the voice id. */
-  voicesDeleteBody: 'Usuwa „{name}” z katalogu razem z próbką i danymi pomocniczymi.',
-  voicesDeleteWav: 'Usuń też nagranie wzorcowe',
+  /** {name} is the voice name. */
+  voicesDeleteBody: 'Usuwa „{name}” i jego próbkę. Opowieści ustawione na ten głos będą potrzebowały innego.',
+  voicesDeleteWav: 'Usuń też jego nagranie',
   voicesSaveError: 'Nie udało się zapisać zmiany.',
   voicesAdvancedShow: 'Zaawansowane: edytuj plik voices.json',
   voicesAdvancedHide: 'Ukryj edytor pliku',
   voicesAdvancedHint:
     'Katalog to zwykły plik. Wszystko powyżej edytuje go za Ciebie — to tylko na wyjątkowe przypadki.',
   voicesInvalidJson: 'Nieprawidłowy JSON — plik i tak można zapisać',
+
+  // --- Add a voice: language → how → do it ---
+  voicesAdd: 'Dodaj głos',
+  voicesAddStepLanguage: 'W jakim języku ma czytać?',
+  voicesAddStepHow: 'Skąd ma pochodzić głos?',
+  voicesAddBack: 'Wstecz',
+  /** {count} is how many voices the shelf has for that language. */
+  voicesAddOfferCount: '{count} do wyboru',
+  voicesAddChoose: 'Wybierz głos',
+  voicesAddChooseHint: 'Wybierz z gotowej listy. Każdego możesz posłuchać przed dodaniem.',
+  voicesAddUpload: 'Wgraj nagranie',
+  voicesAddUploadHint: 'Ktoś czyta przez pół minuty, a opowieści są potem czytane jego głosem.',
+  voicesAddRecord: 'Nagraj teraz',
+  voicesAddRecordHint: 'Przeczytaj fragment na głos. Tworzenie głosu zajmie potem kilka minut.',
+  /** Browsers hide the microphone on an insecure origin; {url} is the same page over https. */
+  voicesAddRecordBlocked:
+    'Mikrofon działa tylko przez bezpieczne połączenie. Otwórz {url} — przeglądarka raz ostrzeże o certyfikacie, przejdź dalej.',
+  voicesRecordStart: 'Zacznij nagrywać',
+  voicesRecordStop: 'Zatrzymaj',
+  voicesRecordAgain: 'Nagraj jeszcze raz',
+  voicesRecordHint: 'Naciśnij start, przeczytaj fragment powyżej, potem naciśnij stop.',
+  voicesRecordKeepGoing: 'Czytaj dalej — potrzeba co najmniej 10 sekund.',
+  voicesRecordEnough: 'Wystarczająco długo. Możesz zatrzymać, kiedy chcesz.',
+  voicesRecordListen: 'Odsłuchaj',
+  voicesRecordDenied: 'Przeglądarka zablokowała mikrofon. Zezwól na dostęp dla tej strony i spróbuj ponownie.',
+  voicesRecordFailed: 'Nagranie się nie udało. Spróbuj jeszcze raz.',
+  voicesAddInstall: 'Dodaj',
+  voicesAddInstalling: 'Dodaję…',
+  voicesAddInstallError: 'Nie udało się dodać tego głosu.',
+  voicesOffersEmpty: 'Nie ma jeszcze gotowych głosów w tym języku — wgraj nagranie.',
+  voicesOffersLoadError: 'Nie udało się pobrać listy głosów.',
+  /** Shown on the Add button; {size} is like "64 MB". */
+  voicesDownloadSize: 'pobiera {size}',
+  voicesDownloadNone: 'nic do pobrania',
+
+  // --- Add a voice: the upload instructions ---
+  voicesUploadTitle: 'Wgraj nagranie',
+  voicesUploadRules: 'Co zadziała',
+  voicesUploadRule1: 'Od 20 do 40 sekund mówienia.',
+  voicesUploadRule2: 'Tylko jedna osoba — bez muzyki, telewizora i innych głosów.',
+  voicesUploadRule3: 'Czytaj zwyczajnie, jak bajkę na dobranoc. Aktorstwo tylko szkodzi.',
+  voicesUploadRule4: 'Cichy pokój. Telefon trzymany na szerokość dłoni wystarczy.',
+  voicesUploadFormats: 'wav, mp3 lub m4a — cokolwiek nagrywa dyktafon w telefonie.',
+  voicesUploadScript: 'Przeczytaj to',
+  voicesUploadScriptHint: 'Każdy tekst zadziała, ale ten ma odpowiednią długość i ton.',
+  /** ~40 s read aloud, in narration register so the copy is conditioned on storytelling. */
+  voicesUploadPassageEn:
+    'The elder of Marrowfield did not offer them chairs. He spoke about the gem the way a man speaks about a debt he has decided not to pay. Outside, the rain had stopped, and the road out of town was already turning to mud. They had until morning to decide, and neither of them wanted to be the one who said it first.',
+  voicesUploadPassagePl:
+    'Starszy z Marrowfield nie zaproponował im krzeseł. Mówił o klejnocie tak, jak człowiek mówi o długu, którego postanowił nie spłacić. Na zewnątrz deszcz ustał, a droga z miasta zamieniała się już w błoto. Mieli czas do rana, żeby zdecydować, i żadne z nich nie chciało powiedzieć tego pierwsze.',
+  voicesUploadPick: 'Wybierz nagranie',
+  voicesUploadNameLabel: 'Czyj to głos?',
+  voicesUploadNamePlaceholder: 'np. Babcia',
+  voicesUploadSubmit: 'Dodaj ten głos',
+  voicesUploading: 'Wysyłam…',
+  /** Measured at ~8 minutes on an RTX 4060 Ti: conditioning, then rendering the first sample. */
+  voicesUploadPreparing: 'Uczę się głosu — kilka minut. Możesz zamknąć tę stronę, praca trwa dalej.',
+  voicesUploadError: 'Nie udało się użyć tego nagrania.',
 
   // --- Samples (temporary TTS shelf) ---
   samplesTitle: 'Próbki audio (tymczasowe)',

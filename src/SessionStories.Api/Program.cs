@@ -12,15 +12,18 @@ using SessionStories.Core.Universes;
 using SessionStories.Core.Voices;
 using SessionStories.Providers.Claude;
 using SessionStories.Providers.Store;
+using SessionStories.Providers.Voices;
 using SessionStories.Providers.Whisper;
 using SessionStories.Tts.Chatterbox;
 using SessionStories.Tts.Piper;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// docs/api.md: LAN listener on 0.0.0.0:5211 unless config overrides (appsettings "Urls" / ASPNETCORE_URLS).
+// docs/api.md: LAN listeners on 0.0.0.0 unless config overrides (appsettings "Urls" / ASPNETCORE_URLS).
+// https exists for one reason: browsers only expose the microphone on a secure origin, so recording
+// a voice from the phone is impossible over plain http. Kestrel picks up the ASP.NET dev certificate.
 if (builder.Configuration["Urls"] is null)
-    builder.WebHost.UseUrls("http://0.0.0.0:5211");
+    builder.WebHost.UseUrls("http://0.0.0.0:5211", "https://0.0.0.0:5212");
 
 var options = builder.Configuration.GetSection("SessionStories").Get<SessionStoriesOptions>() ?? new SessionStoriesOptions();
 options.ResolveDefaults(builder.Environment.ContentRootPath);
@@ -56,7 +59,6 @@ var chatterboxOptions = new ChatterboxOptions
 var piperOptions = new PiperOptions
 {
     ModelsRoot = options.Piper.ModelsRoot,
-    VoiceModels = options.Piper.VoiceModels,
 };
 builder.Services.AddSingleton<IReadOnlyDictionary<string, Func<ITtsProvider>>>(_ =>
     new Dictionary<string, Func<ITtsProvider>>
@@ -64,6 +66,24 @@ builder.Services.AddSingleton<IReadOnlyDictionary<string, Func<ITtsProvider>>>(_
         ["chatterbox-onnx"] = () => new ChatterboxOnnxProvider(chatterboxOptions),
         ["piper-onnx"] = () => new PiperOnnxProvider(piperOptions),
     });
+
+// The shelf of installable voices, and the per-engine plumbing that turns a shelf entry (or a
+// reader's own recording) into one. Adding an engine means registering an installer here — no
+// other layer, and no configuration file, learns about it.
+builder.Services.AddSingleton<IVoiceGallery>(_ => new ShelfVoiceGallery(options.GalleryRoot));
+builder.Services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(10) });
+builder.Services.AddSingleton<IReadOnlyDictionary<string, IVoiceInstaller>>(services =>
+{
+    var gallery = (ShelfVoiceGallery)services.GetRequiredService<IVoiceGallery>();
+    var store = services.GetRequiredService<IVoiceStore>();
+    var http = services.GetRequiredService<HttpClient>();
+    return new Dictionary<string, IVoiceInstaller>
+    {
+        ["chatterbox-onnx"] = new CloningVoiceInstaller("chatterbox-onnx", store,
+            () => new ChatterboxOnnxProvider(chatterboxOptions), http, gallery.WavsRoot),
+        ["piper-onnx"] = new PiperVoiceInstaller("piper-onnx", piperOptions.ModelsRoot, http),
+    };
+});
 // Capability metadata, keyed the same way but resolved from statics: a read-only endpoint such
 // as GET /api/voices must never construct a provider (that path ends in ONNX sessions in VRAM).
 builder.Services.AddSingleton<IReadOnlyDictionary<string, TtsCapabilities>>(_ =>
@@ -171,7 +191,8 @@ api.MapGet("/universes/{uid}/pending-facts", (string uid, IStoryStore stories) =
 });
 
 // ---------------------------------------------------------------------------
-// Voices — global (machine/engine concern), not scoped to a universe
+// Voices — global (an engine concern, not a story-world one). Installed artifacts:
+// which engine backs a voice never crosses this boundary.
 // ---------------------------------------------------------------------------
 
 api.MapGet("/voices", (IVoiceStore voices, IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
@@ -179,67 +200,35 @@ api.MapGet("/voices", (IVoiceStore voices, IReadOnlyDictionary<string, TtsCapabi
     var catalog = voices.ReadCatalog();
     if (catalog is null)
         return Results.Ok(Array.Empty<object>());
-    return Results.Ok(catalog.Voices.Select(entry =>
-        VoiceView(voices, ttsCapabilities, catalog, entry.Key, entry.Value)));
+    return Results.Ok(catalog.Voices.Values
+        .OrderBy(voice => voice.Name, StringComparer.CurrentCultureIgnoreCase)
+        .Select(voice => VoiceView(voices, ttsCapabilities, catalog, voice)));
 });
 
-// The "engine" select in the Add-voice dialog: whatever this build has registered. Cloning
-// support rides along so the dialog can hide the reference-wav field for fixed-voice engines.
-api.MapGet("/voices/providers", (IReadOnlyDictionary<string, Func<ITtsProvider>> ttsFactories,
-    IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
-    Results.Ok(ttsFactories.Keys.OrderBy(key => key, StringComparer.Ordinal).Select(key => new
-    {
-        id = key,
-        supportsCloning = ttsCapabilities.GetValueOrDefault(key)?.SupportsVoiceCloning ?? false,
-    })));
-
-api.MapPost("/voices", (CreateVoiceRequest request, IVoiceStore voices,
-    IReadOnlyDictionary<string, Func<ITtsProvider>> ttsFactories,
-    IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
-{
-    if (!IsValidVoiceId(request.Id))
-        return Problem(400, "Invalid voice id");
-    if (!ttsFactories.ContainsKey(request.Provider ?? ""))
-        return Problem(400, $"Unknown provider '{request.Provider}'. Registered: {string.Join(", ", ttsFactories.Keys)}");
-    var languages = CleanLanguages(request.Languages);
-    if (languages.Count == 0)
-        return Problem(400, "At least one language is required");
-
-    var created = voices.WriteVoice(request.Id!,
-        new VoiceEntryEdit(request.Provider, languages, request.Exaggeration, request.Cfg));
-    var view = ReadVoiceView(voices, ttsCapabilities, request.Id!);
-    return created ? Results.Created($"/api/voices/{request.Id}", view) : Results.Ok(view);
-});
-
+// Rename, re-describe, restyle. Everything else about a voice was decided when it was installed.
 api.MapPatch("/voices/{id}", (string id, PatchVoiceRequest request, IVoiceStore voices,
-    IReadOnlyDictionary<string, Func<ITtsProvider>> ttsFactories,
     IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
 {
     if (!IsValidVoiceId(id))
         return Problem(400, "Invalid voice id");
-    if (request.Provider is { } provider && !ttsFactories.ContainsKey(provider))
-        return Problem(400, $"Unknown provider '{provider}'. Registered: {string.Join(", ", ttsFactories.Keys)}");
-    List<string>? languages = null;
-    if (request.Languages is not null)
-    {
-        languages = CleanLanguages(request.Languages);
-        if (languages.Count == 0)
-            return Problem(400, "At least one language is required");
-    }
+    if (request.Name is { } name && string.IsNullOrWhiteSpace(name))
+        return Problem(400, "A voice needs a name");
+    if (request.Style is { } style && !VoiceStyle.All.Contains(style, StringComparer.OrdinalIgnoreCase))
+        return Problem(400, $"Unknown style '{style}'. Known: {string.Join(", ", VoiceStyle.All)}");
 
-    return voices.PatchVoice(id, new VoiceEntryEdit(request.Provider, languages, request.Exaggeration, request.Cfg))
+    return voices.PatchVoice(id, new VoiceEdit(request.Name, request.Description, request.Style))
         ? Results.Ok(ReadVoiceView(voices, ttsCapabilities, id))
-        : Problem(404, $"Voice '{id}' is not in the catalog");
+        : Problem(404, $"Voice '{id}' is not installed");
 });
 
-// The reference wav may be shared by several entries, so it survives unless ?deleteWav=true.
+// The reference recording may be shared by several voices, so it survives unless ?deleteWav=true.
 api.MapDelete("/voices/{id}", (string id, bool? deleteWav, IVoiceStore voices) =>
 {
     if (!IsValidVoiceId(id))
         return Problem(400, "Invalid voice id");
     return voices.DeleteVoice(id, deleteWav == true)
         ? Results.NoContent()
-        : Problem(404, $"Voice '{id}' is not in the catalog");
+        : Problem(404, $"Voice '{id}' is not installed");
 });
 
 api.MapPut("/voices/default", (SetDefaultVoiceRequest request, IVoiceStore voices) =>
@@ -248,22 +237,144 @@ api.MapPut("/voices/default", (SetDefaultVoiceRequest request, IVoiceStore voice
         return Problem(400, "Invalid voice id");
     return voices.SetDefaultVoice(request.Id!)
         ? Results.NoContent()
-        : Problem(404, $"Voice '{request.Id}' is not in the catalog");
+        : Problem(404, $"Voice '{request.Id}' is not installed");
 });
 
-// New reference recording ⇒ the preview and the conditionals cache are stale (the cache
-// deliberately never re-reads its source wav); IVoiceStore drops both.
-api.MapPost("/voices/{id}/reference", async (string id, IFormFile file, IVoiceStore voices,
+// ---- the shelf: what you could add ---------------------------------------------------
+
+// Step one of "add a voice". canUpload says whether any installed engine can copy a recording
+// in this language — the flow must not offer Upload where it cannot possibly work.
+api.MapGet("/voice-gallery/languages", (IVoiceGallery gallery,
     IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
+    Results.Ok(gallery.ListLanguages().Select(language => new
+    {
+        locale = language.Locale,
+        offerCount = language.OfferCount,
+        canUpload = ttsCapabilities.Values.Any(capability =>
+            capability.SupportsVoiceCloning &&
+            capability.Languages.Contains(VoiceLocale.LanguageOf(language.Locale), StringComparer.OrdinalIgnoreCase)),
+    })));
+
+api.MapGet("/voice-gallery", (string? locale, IVoiceGallery gallery) =>
 {
-    if (!IsValidVoiceId(id))
-        return Problem(400, "Invalid voice id");
-    if (!Path.GetExtension(file.FileName).Equals(".wav", StringComparison.OrdinalIgnoreCase))
-        return Problem(400, "Reference recordings must be .wav files");
-    await using var stream = file.OpenReadStream();
-    return voices.SaveReferenceWav(id, stream)
-        ? Results.Ok(ReadVoiceView(voices, ttsCapabilities, id))
-        : Problem(404, $"Voice '{id}' is not in the catalog");
+    if (string.IsNullOrWhiteSpace(locale))
+        return Problem(400, "locale is required");
+    return Results.Ok(gallery.ListOffers(locale).Select(offer => new
+    {
+        key = offer.Key,
+        name = offer.Name,
+        description = offer.Description,
+        locale = offer.Locale,
+        downloadBytes = offer.DownloadBytes,
+        license = offer.License,
+        attribution = offer.Attribution,
+    }));
+});
+
+// Pre-rendered and shipped, so auditioning before installing costs one static file read.
+// Catch-all: an offer key carries a slash ("piper/pl_PL-gosia-medium").
+api.MapGet("/voice-gallery/sample/{**key}", (string key, IVoiceGallery gallery) =>
+{
+    var path = gallery.SamplePath(key);
+    if (path is null)
+        return Problem(404, $"No sample for '{key}'");
+    return Results.File(path, "audio/mpeg", enableRangeProcessing: true);
+});
+
+api.MapPost("/voices/install", (InstallVoiceRequest request, IVoiceGallery gallery, IVoiceStore voices,
+    JobRegistry registry) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Key))
+        return Problem(400, "key is required");
+    if (gallery.FindOffer(request.Key) is not { } offer)
+        return Problem(404, $"'{request.Key}' is not on the voice list");
+
+    var name = string.IsNullOrWhiteSpace(request.Name) ? offer.Name : request.Name!.Trim();
+    var voiceId = UniqueVoiceId(name, voices);
+    var job = registry.Enqueue(new JobRecord
+    {
+        Id = NewJobId(),
+        Type = JobType.InstallVoice,
+        StoryId = "",
+        Variant = "",
+        VoiceId = voiceId,
+        Install = new VoiceInstallRequest(
+            VoiceId: voiceId,
+            Name: name,
+            Description: offer.Description,
+            Locale: offer.Locale,
+            Style: VoiceStyle.Default,
+            Plan: offer.Plan,
+            Source: new VoiceProvenance(offer.Key, offer.License, offer.Attribution)),
+    });
+    return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id, voiceId });
+});
+
+// Upload (and, once the mic is reachable, recording) — the same install path with the reader's
+// own audio instead of a shelf asset.
+api.MapPost("/voices/from-recording", async (HttpRequest http, IVoiceStore voices, JobRegistry registry,
+    IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities, SessionStoriesOptions appOptions) =>
+{
+    if (!http.HasFormContentType)
+        return Problem(400, "Expected a multipart form with the recording");
+    var form = await http.ReadFormAsync();
+    if (form.Files.Count == 0)
+        return Problem(400, "No recording was attached");
+
+    var file = form.Files[0];
+    var name = form["name"].ToString().Trim();
+    if (name.Length == 0)
+        return Problem(400, "A voice needs a name");
+    var locale = VoiceLocale.Normalize(form["locale"].ToString());
+    var language = VoiceLocale.LanguageOf(locale);
+
+    // Which engine can actually copy a voice in this language decides the install; the reader
+    // never picks one.
+    var engineId = ttsCapabilities
+        .Where(pair => pair.Value.SupportsVoiceCloning &&
+                       pair.Value.Languages.Contains(language, StringComparer.OrdinalIgnoreCase))
+        .Select(pair => pair.Key)
+        .FirstOrDefault();
+    if (engineId is null)
+        return Problem(400, $"No installed engine can copy a voice in {locale}");
+
+    var voiceId = UniqueVoiceId(name, voices);
+    var uploadsRoot = Path.Combine(appOptions.LibraryRoot, "voice-uploads");
+    Directory.CreateDirectory(uploadsRoot);
+    var extension = Path.GetExtension(file.FileName);
+    if (extension.Length > 8 || extension.Any(c => !char.IsLetterOrDigit(c) && c != '.'))
+        extension = "";
+    var uploadPath = Path.Combine(uploadsRoot, voiceId + extension);
+    await using (var stream = File.Create(uploadPath))
+        await file.CopyToAsync(stream);
+
+    // Reject a too-short recording now rather than after the reader has waited for a job.
+    if (ReferenceAudio.TryReadDuration(uploadPath) is { } duration && duration < ReferenceAudio.MinimumDuration)
+    {
+        File.Delete(uploadPath);
+        return Problem(400,
+            $"That recording is only {duration.TotalSeconds:0.#} seconds long. " +
+            "A voice needs at least 10 seconds of clear speech; 20–40 seconds works best.");
+    }
+
+    var job = registry.Enqueue(new JobRecord
+    {
+        Id = NewJobId(),
+        Type = JobType.InstallVoice,
+        StoryId = "",
+        Variant = "",
+        VoiceId = voiceId,
+        Install = new VoiceInstallRequest(
+            VoiceId: voiceId,
+            Name: name,
+            Description: form["description"].ToString().Trim(),
+            Locale: locale,
+            Style: VoiceStyle.Default,
+            Plan: new VoiceInstallPlan(engineId),
+            Source: null,
+            SuppliedAudioPath: uploadPath),
+    });
+    return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id, voiceId });
 }).DisableAntiforgery();
 
 api.MapGet("/voices/catalog", (IVoiceStore voices, HttpResponse response) =>
@@ -614,8 +725,10 @@ api.MapPost("/stories/{sid}/jobs", (string sid, CreateJobRequest request, IStory
         case JobType.RegenScene when string.IsNullOrWhiteSpace(request.SceneId):
             return Problem(400, "RegenScene jobs require 'sceneId'");
         case JobType.PreviewVoice:
-            // Previews belong to a voice, not a story — POST /api/voices/{id}/preview.
+            // Samples belong to a voice, not a story — POST /api/voices/{id}/preview.
             return Problem(400, "PreviewVoice jobs are enqueued at POST /api/voices/{id}/preview");
+        case JobType.InstallVoice:
+            return Problem(400, "InstallVoice jobs are enqueued at POST /api/voices/install");
     }
     if (request.Type != JobType.Transcribe && string.IsNullOrWhiteSpace(request.Variant))
         return Problem(400, $"{request.Type} jobs require 'variant'");
@@ -730,30 +843,64 @@ static bool IsSafeFileName(string name)
 static bool IsValidVoiceId(string? id)
     => id is not null && IsSafeFileName(id) && !Program.ReservedVoiceIds.Contains(id);
 
-static List<string> CleanLanguages(IEnumerable<string>? languages)
-    => [.. (languages ?? []).Select(l => l.Trim()).Where(l => l.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)];
+/// <summary>
+/// A stable, file-safe id derived from the display name, uniquified against what is installed.
+/// The id is plumbing — it keys the catalog and the story files and is never shown; the reader
+/// names the voice, and renaming it later must not break a single story.
+/// </summary>
+static string UniqueVoiceId(string name, IVoiceStore voices)
+{
+    var slug = new string([.. name.ToLowerInvariant()
+        .Select(c => char.IsLetterOrDigit(c) && c < 128 ? c : '-')])
+        .Trim('-');
+    while (slug.Contains("--"))
+        slug = slug.Replace("--", "-");
+    if (slug.Length == 0)
+        slug = "voice";
+    if (slug.Length > 40)
+        slug = slug[..40].Trim('-');
 
-/// <summary>Re-reads one catalog entry in the GET /api/voices shape; null when the id is gone.</summary>
+    var taken = voices.ReadCatalog()?.Voices.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+    if (!taken.Contains(slug) && !Program.ReservedVoiceIds.Contains(slug))
+        return slug;
+    for (var suffix = 2; ; suffix++)
+    {
+        var candidate = $"{slug}-{suffix}";
+        if (!taken.Contains(candidate) && !Program.ReservedVoiceIds.Contains(candidate))
+            return candidate;
+    }
+}
+
+/// <summary>Re-reads one voice in the GET /api/voices shape; null when the id is gone.</summary>
 static object? ReadVoiceView(IVoiceStore voices, IReadOnlyDictionary<string, TtsCapabilities> capabilities, string id)
 {
     var catalog = voices.ReadCatalog();
-    var entry = catalog?.Voices.GetValueOrDefault(id);
-    return entry is null ? null : VoiceView(voices, capabilities, catalog!, id, entry);
+    var voice = catalog?.Voices.GetValueOrDefault(id);
+    return voice is null ? null : VoiceView(voices, capabilities, catalog!, voice);
 }
 
+/// <summary>
+/// The reader's view of an installed voice. Deliberately carries no engine id, no knob values and
+/// no file names: everything here is something a person can act on. The raw catalog stays reachable
+/// at /api/voices/catalog for when you want the machine truth.
+/// </summary>
 static object VoiceView(IVoiceStore voices, IReadOnlyDictionary<string, TtsCapabilities> capabilities,
-    VoiceCatalog catalog, string id, VoiceEntry entry) => new
+    VoiceCatalog catalog, InstalledVoice voice) => new
 {
-    id,
-    provider = entry.Provider,
-    languages = entry.Languages,
-    referenceWav = entry.ReferenceWav,
-    knobs = new { exaggeration = entry.Exaggeration, cfg = entry.Cfg },
-    hasReferenceWav = voices.ResolveReferenceWav(id) is not null,
-    hasPreview = File.Exists(voices.PreviewPath(id)),
-    isDefault = string.Equals(id, catalog.Default, StringComparison.Ordinal),
-    // A property of the engine, not of whether a wav happens to be listed; unknown engine ⇒ false.
-    supportsCloning = capabilities.GetValueOrDefault(entry.Provider)?.SupportsVoiceCloning ?? false,
+    id = voice.Id,
+    name = voice.Name,
+    description = voice.Description,
+    locale = voice.Locale,
+    style = voice.Style,
+    // Which deliveries this voice's engine offers — every engine declares all three today, but the
+    // UI renders what it is told rather than assuming.
+    styles = capabilities.GetValueOrDefault(voice.EngineId)?.StylePresets.Select(preset => preset.Id).ToArray()
+        ?? [.. VoiceStyle.All],
+    isDefault = string.Equals(voice.Id, catalog.Default, StringComparison.Ordinal),
+    // Install guarantees this; false means something went wrong and the card should say so.
+    hasSample = File.Exists(voices.PreviewPath(voice.Id)),
+    attribution = voice.Source?.Attribution ?? "",
+    license = voice.Source?.License ?? "",
 };
 
 static string ContentTypeForText(string name)
@@ -869,9 +1016,11 @@ sealed record CreateJobRequest(JobType Type, string? Variant, string? SceneId, s
 
 sealed record ApproveFactsRequest(string[] AcceptedLineIds);
 
-sealed record CreateVoiceRequest(string? Id, string? Provider, string[]? Languages, double? Exaggeration, double? Cfg);
+/// <summary>Everything a reader may change about a voice after it is installed.</summary>
+sealed record PatchVoiceRequest(string? Name, string? Description, string? Style);
 
-sealed record PatchVoiceRequest(string? Provider, string[]? Languages, double? Exaggeration, double? Cfg);
+/// <summary>Install a voice off the shelf. Name is optional — the offer's own name is the default.</summary>
+sealed record InstallVoiceRequest(string? Key, string? Name);
 
 sealed record SetDefaultVoiceRequest(string? Id);
 
@@ -887,7 +1036,7 @@ partial class Program
     /// <summary>Literal segments under /api/voices — a voice may not be named after one of them.</summary>
     internal static readonly HashSet<string> ReservedVoiceIds = new(StringComparer.OrdinalIgnoreCase)
     {
-        "catalog", "providers", "default",
+        "catalog", "providers", "default", "install", "from-recording",
     };
 
     private static object JobSummary(JobRecord job) => new

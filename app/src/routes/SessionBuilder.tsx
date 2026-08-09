@@ -329,11 +329,11 @@ export default function SessionBuilder() {
     return text === null ? [] : parseCharacters(text);
   }, [charsQuery.data]);
 
-  // Katalog głosów jest globalny (library/voices.json). Pokazujemy głosy w języku
-  // sesji, a gdy żaden nie pasuje — wszystkie, żeby lista nigdy nie była pusta.
+  // Voices are global (library/voices.json). Show the ones that speak the session's
+  // language; when none do, show them all so the list is never empty.
   const voices = useMemo(() => {
     const all = voicesQuery.data ?? [];
-    const matching = all.filter((v) => v.languages.includes(language));
+    const matching = all.filter((v) => v.locale.toLowerCase().startsWith(language.toLowerCase()));
     return matching.length > 0 ? matching : all;
   }, [voicesQuery.data, language]);
 
@@ -691,7 +691,11 @@ export default function SessionBuilder() {
               <option value="">{t.voiceDefault}</option>
               {voices.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.languages.length > 0 ? `${v.id} (${v.languages.join(', ')})` : v.id}
+                  {/* The list is already filtered to this language; the locale only shows
+                      in the fallback case, where every voice is a different language. */}
+                  {v.locale.toLowerCase().startsWith(language.toLowerCase())
+                    ? v.name
+                    : `${v.name} (${v.locale})`}
                 </option>
               ))}
               {voiceId !== '' && !voices.some((v) => v.id === voiceId) && <option value={voiceId}>{voiceId}</option>}

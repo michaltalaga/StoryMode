@@ -13,6 +13,7 @@ try
     {
         "prepare-voice" => PrepareVoice(args[1..]),
         "synth" => Synth(args[1..]),
+        "synth-piper" => SynthPiper(args[1..]),
         "parity" => Parity(args[1..]),
         _ => Usage($"unknown verb '{args[0]}'"),
     };
@@ -81,6 +82,41 @@ static int Synth(string[] rest)
     var request = new TtsRequest(
         File.ReadAllText(textFile), lang, voice, outPath,
         knobs.Count > 0 ? knobs : null, seed);
+
+    provider.SynthesizeAsync(request, new ConsoleProgress()).GetAwaiter().GetResult();
+    Console.WriteLine($"wrote {outPath}");
+    return 0;
+}
+
+/// <summary>
+/// Renders through a piper bundle. Same panel-bypass promise as `synth`, for the engine whose
+/// voices are fixed trained models — and how the shipped gallery samples get made.
+/// </summary>
+static int SynthPiper(string[] rest)
+{
+    var flags = ParseFlags(rest, []);
+    var textFile = Require(flags, "text-file");
+    var bundle = Require(flags, "bundle");
+    var lang = Require(flags, "lang");
+    var outPath = Require(flags, "out");
+
+    if (!File.Exists(textFile))
+        throw new UsageException($"text file not found: {textFile}");
+
+    var modelsRoot = flags.GetValueOrDefault("models-root")
+        ?? Path.Combine(FindRepoRoot(), "models", "piper");
+
+    var knobs = new Dictionary<string, double>();
+    AddKnob(flags, knobs, "speed");
+
+    var provider = new SessionStories.Tts.Piper.PiperOnnxProvider(
+        new SessionStories.Tts.Piper.PiperOptions { ModelsRoot = modelsRoot });
+
+    EnsureParentDir(outPath);
+    var request = new TtsRequest(
+        File.ReadAllText(textFile), lang, bundle, outPath,
+        knobs.Count > 0 ? knobs : null,
+        EngineData: new Dictionary<string, string> { ["bundle"] = bundle });
 
     provider.SynthesizeAsync(request, new ConsoleProgress()).GetAwaiter().GetResult();
     Console.WriteLine($"wrote {outPath}");
@@ -251,6 +287,9 @@ static int Usage(string? error)
           tts-cli synth --text-file <path> --voice <voiceId-or-wav> --lang <code> --out <mp3>
                         [--exaggeration <0..1>] [--cfg <0..1>] [--temperature <0..2>] [--seed <int>]
                         [--cpu] [--wav-out <path>] [--model-dir <dir>] [--cache-dir <dir>]
+
+          tts-cli synth-piper --text-file <path> --bundle <bundleFolder> --lang <code> --out <mp3>
+                        [--speed <0.5..2>] [--models-root <dir>]
 
           tts-cli parity (--text <string> | --text-file <path>) --lang <code> --dump-tokens <path.json>
                         [--voice <wav>] [--cpu] [--wav-out <path>] [--exaggeration <v>]
