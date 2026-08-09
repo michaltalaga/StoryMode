@@ -343,6 +343,17 @@ export const strings = {
   sceneRegenPlaceholder: 'Np. mniej opisów, więcej dialogu…',
   enqueueError: 'Nie udało się dodać zadania.',
   renderTtsEnqueueError: 'Nie udało się dodać zadania renderowania.',
+  sceneRegenOwnNotesLabel: 'Własne uwagi (opcjonalnie)',
+  sceneRegenNothingSelectedHint: 'Zaznacz uwagi albo napisz własne',
+
+  // Uwagi weryfikacji — etykiety kategorii (slug reguły → język ludzki)
+  verifyRuleGivenDrift: 'Zmienione fakty — tak nie było',
+  verifyRuleRegister: 'Styl narracji',
+  verifyRuleAnachronism: 'Anachronizm',
+  verifyRuleNaming: 'Nazewnictwo',
+  verifyRuleHardRules: 'Zasady świata',
+  verifyRuleCanon: 'Sprzeczne z kroniką',
+  verifyRuleTone: 'Ton opowieści',
   draftConflictDiskTitle: 'Szkic zmienił się na dysku',
   draftConflictDiskBody:
     'plik szkicu został w międzyczasie zmieniony (np. przez regenerację albo ręczną edycję). Co zrobić z Twoją wersją?',

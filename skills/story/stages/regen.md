@@ -25,6 +25,10 @@ Never write into `draft.<v>.md`.
 ## Rules
 - Rewrite only `sN`. The surrounding scenes are fixed context — the new text must join
   seamlessly to the scene before and after as they currently read.
+- **The feedback note is the work order.** Fix exactly what it asks — no more. Verify
+  flags on `sN` that the note does not mention were deliberately left alone by the
+  human; do not fix them. Only when the note is empty, fall back to fixing all
+  outstanding `sN` flags from `verify.<v>.md`.
 - Feedback interprets, it does not override: if the note asks for something that would
   contradict a `given` beat, satisfy the intent as far as the beat allows and keep the
   events intact.

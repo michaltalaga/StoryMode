@@ -17,6 +17,43 @@ function prevPath(storyId: string, variant: string, sceneId: string): string {
   return `/api/stories/${storyId}/prev/${variant}/${sceneId}`;
 }
 
+/** Mapuje slug reguły weryfikacji na ludzką etykietę; nieznany slug wraca bez zmian. */
+function ruleLabel(rule: string): string {
+  switch (rule) {
+    case 'given-drift':
+      return strings.verifyRuleGivenDrift;
+    case 'register':
+      return strings.verifyRuleRegister;
+    case 'anachronism':
+      return strings.verifyRuleAnachronism;
+    case 'naming':
+      return strings.verifyRuleNaming;
+    case 'hard-rules':
+      return strings.verifyRuleHardRules;
+    case 'canon':
+      return strings.verifyRuleCanon;
+    case 'tone':
+      return strings.verifyRuleTone;
+    default:
+      return rule;
+  }
+}
+
+/** Składa feedbackNote z zaznaczonych uwag weryfikacji i własnego tekstu użytkownika. */
+function composeFeedbackNote(
+  flags: readonly VerifyFlag[],
+  checked: readonly boolean[],
+  freeText: string,
+): string {
+  const lines = flags
+    .filter((_, i) => checked[i] === true)
+    .map((flag) => `- [${ruleLabel(flag.rule)}] ${flag.detail}`);
+  const extra = freeText.trim();
+  if (lines.length === 0) return extra;
+  const base = `Zastosuj następujące uwagi weryfikacji:\n${lines.join('\n')}`;
+  return extra.length > 0 ? `${base}\n\nDodatkowo: ${extra}` : base;
+}
+
 /** Wyciąga cytat z detail flagi weryfikacji: "..." albo „..." — proste dopasowanie. */
 function extractQuote(detail: string): string | null {
   const straight = detail.match(/"([^"]+)"/);
@@ -217,8 +254,11 @@ function SceneCard(props: SceneCardProps) {
         <ul className="space-y-1 border-b border-rose-100 bg-rose-50 px-4 py-3 sm:px-6">
           {scene.flags.map((flag, i) => (
             <li key={i} className="text-sm text-rose-800">
-              <span className="mr-2 inline-block rounded bg-rose-200 px-1.5 py-0.5 font-mono text-xs">
-                {flag.rule}
+              <span
+                title={flag.rule}
+                className="mr-2 inline-block rounded bg-rose-200 px-1.5 py-0.5 text-xs font-medium"
+              >
+                {ruleLabel(flag.rule)}
               </span>
               {flag.detail}
             </li>
@@ -319,6 +359,8 @@ export default function DraftReview() {
   const [conflict, setConflict] = useState<{ sceneId: string; etag: string } | null>(null);
   const [regenFor, setRegenFor] = useState<string | null>(null);
   const [feedbackNote, setFeedbackNote] = useState('');
+  // Zaznaczenia uwag weryfikacji w dialogu regeneracji — tablica równoległa do flags sceny.
+  const [checkedFlags, setCheckedFlags] = useState<boolean[]>([]);
 
   const jobs = (useJobs().data ?? []) as JobDto[];
 
@@ -417,9 +459,15 @@ export default function DraftReview() {
     onSuccess: () => {
       setRegenFor(null);
       setFeedbackNote('');
+      setCheckedFlags([]);
       void queryClient.invalidateQueries();
     },
   });
+
+  // Scena, której dotyczy otwarty dialog regeneracji (jej flagi zasilają checklistę).
+  const regenScene = regenFor !== null ? (scenes.find((s) => s.sceneId === regenFor) ?? null) : null;
+  const regenFlags = regenScene?.flags ?? [];
+  const regenCanSubmit = checkedFlags.some(Boolean) || feedbackNote.trim().length > 0;
 
   const renderTtsMutation = useMutation({
     mutationFn: () => enqueueJob(id, { type: 'renderTts', variant }),
@@ -595,6 +643,8 @@ export default function DraftReview() {
                 onRegen={() => {
                   setRegenFor(sceneId);
                   setFeedbackNote('');
+                  // Wszystkie uwagi weryfikacji domyślnie zaznaczone do zastosowania.
+                  setCheckedFlags(scene.flags.map(() => true));
                 }}
                 onRestore={(prevText) => restoreMutation.mutate({ sceneId, text: prevText })}
               />
@@ -603,43 +653,86 @@ export default function DraftReview() {
         </main>
       </div>
 
-      {/* Dialog regeneracji sceny: jedno pole na wskazówkę */}
+      {/* Dialog regeneracji sceny: checklista uwag weryfikacji + pole na własne uwagi */}
       <Dialog.Root
         open={regenFor !== null}
         onOpenChange={(open) => {
           if (!open) {
             setRegenFor(null);
             setFeedbackNote('');
+            setCheckedFlags([]);
           }
         }}
       >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-stone-900/40" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white p-6 shadow-xl">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
             <Dialog.Title className="text-lg font-semibold text-stone-900">
               {strings.sceneRegenTitle}
             </Dialog.Title>
             <Dialog.Description className="mt-1 text-sm text-stone-500">
               {strings.sceneLabel} {regenFor}. {strings.sceneRegenHint}
             </Dialog.Description>
+            {regenFlags.length > 0 && (
+              <div className="mt-4">
+                <div className="text-sm font-medium text-stone-700">{strings.verifyFlagsTitle}</div>
+                <ul className="mt-2 space-y-1">
+                  {regenFlags.map((flag, i) => (
+                    <li key={i}>
+                      <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-1.5 hover:bg-stone-50">
+                        <input
+                          type="checkbox"
+                          checked={checkedFlags[i] === true}
+                          onChange={(e) =>
+                            setCheckedFlags((prev) => {
+                              const next = [...prev];
+                              next[i] = e.target.checked;
+                              return next;
+                            })
+                          }
+                          className="mt-0.5 h-5 w-5 shrink-0 accent-violet-600"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-stone-900" title={flag.rule}>
+                            {ruleLabel(flag.rule)}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-stone-500">{flag.detail}</span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <label className="mt-4 block text-sm font-medium text-stone-700" htmlFor="regen-feedback-note">
+              {strings.sceneRegenOwnNotesLabel}
+            </label>
             <textarea
+              id="regen-feedback-note"
               value={feedbackNote}
               onChange={(e) => setFeedbackNote(e.target.value)}
               rows={4}
               placeholder={strings.sceneRegenPlaceholder}
-              className="mt-4 w-full rounded-lg border border-stone-300 p-3 text-sm text-stone-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+              className="mt-1 w-full rounded-lg border border-stone-300 p-3 text-sm text-stone-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
             />
             {regenMutation.isError && (
               <p className="mt-2 text-sm text-rose-600">{strings.enqueueError}</p>
             )}
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              {!regenCanSubmit && (
+                <span className="mr-auto text-xs text-stone-500">{strings.sceneRegenNothingSelectedHint}</span>
+              )}
               <Dialog.Close className={actionButtonClass}>{strings.cancel}</Dialog.Close>
               <button
                 type="button"
                 onClick={() => {
-                  if (regenFor) regenMutation.mutate({ sceneId: regenFor, note: feedbackNote.trim() });
+                  if (regenFor)
+                    regenMutation.mutate({
+                      sceneId: regenFor,
+                      note: composeFeedbackNote(regenFlags, checkedFlags, feedbackNote),
+                    });
                 }}
-                disabled={regenMutation.isPending}
+                disabled={!regenCanSubmit || regenMutation.isPending}
                 className="min-h-10 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
               >
                 Regeneruj

@@ -22,6 +22,10 @@ Headings are scene ids (only scenes that have findings), plus `global` for
 draft-wide issues. Each bullet: `[rule-slug] <quoted evidence or precise description> —
 <which rule/section>`. Write an empty report as a single line: `No violations found.`
 
+Use exactly these slugs — the panel translates them for the reader, so invented slugs
+show up raw: `given-drift`, `anachronism`, `naming`, `hard-rules`, `canon`, `tone`,
+`register` (one per check below, in that order).
+
 ## Checks — all mandatory
 1. **given-drift** — for EVERY beat flagged `given`, locate it in the draft and compare:
    did the events happen as stated, in order, without softening or embellishment into
