@@ -108,6 +108,15 @@ export interface JobDto {
   file?: string | null;
   /** Voice id (previewVoice/installVoice jobs; storyId/variant are empty for those). */
   voiceId?: string | null;
+  /**
+   * Display name and locale of a voice being installed. They travel on the job because the
+   * catalog entry does not exist yet — a cloned voice is only written after conditioning,
+   * minutes in, and the list has to show something from the moment you press Add.
+   */
+  voiceName?: string | null;
+  voiceLocale?: string | null;
+  /** 0–100 where the work can honestly report a fraction (downloads); null otherwise. */
+  percent?: number | null;
   /** Seconds since start (or total when finished). Detail route only. */
   elapsedSeconds?: number | null;
 }

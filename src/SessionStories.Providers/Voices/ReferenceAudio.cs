@@ -20,16 +20,23 @@ public static class ReferenceAudio
     /// Decodes <paramref name="sourcePath"/> (wav/mp3/aiff natively, m4a/aac/wma via Media Foundation),
     /// downmixes to mono, resamples to <see cref="SampleRate"/> and writes a PCM wav atomically.
     /// </summary>
+    /// <param name="enforceMinimum">
+    /// Only for audio a reader supplied. A curated shelf voice ships a reference that was listened to
+    /// before it was added — chatterbox's own default voice is 7.4 s and sounds fine — so applying the
+    /// recording guidance to it would reject voices we know work.
+    /// </param>
     /// <exception cref="InvalidOperationException">The file cannot be decoded, or holds too little audio.</exception>
-    public static void ConvertToWav(string sourcePath, string destinationPath)
+    public static void ConvertToWav(string sourcePath, string destinationPath, bool enforceMinimum = true)
     {
         var samples = ReadMono(sourcePath);
         var duration = TimeSpan.FromSeconds((double)samples.Length / SampleRate);
-        if (duration < MinimumDuration)
+        if (enforceMinimum && duration < MinimumDuration)
         {
-            throw new InvalidOperationException(
-                $"That recording is only {duration.TotalSeconds:0.#} seconds long. " +
-                "A voice needs at least 10 seconds of clear speech to copy; 20–40 seconds works best.");
+            throw new InvalidOperationException(string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "That recording is only {0:0.#} seconds long. " +
+                "A voice needs at least 10 seconds of clear speech to copy; 20–40 seconds works best.",
+                duration.TotalSeconds));
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);

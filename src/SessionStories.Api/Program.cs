@@ -352,9 +352,10 @@ api.MapPost("/voices/from-recording", async (HttpRequest http, IVoiceStore voice
     if (ReferenceAudio.TryReadDuration(uploadPath) is { } duration && duration < ReferenceAudio.MinimumDuration)
     {
         File.Delete(uploadPath);
-        return Problem(400,
-            $"That recording is only {duration.TotalSeconds:0.#} seconds long. " +
-            "A voice needs at least 10 seconds of clear speech; 20–40 seconds works best.");
+        return Problem(400, string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "That recording is only {0:0.#} seconds long. " +
+            "A voice needs at least 10 seconds of clear speech; 20–40 seconds works best.",
+            duration.TotalSeconds));
     }
 
     var job = registry.Enqueue(new JobRecord
@@ -768,6 +769,10 @@ api.MapGet("/jobs/{id}", (string id, JobRegistry registry) =>
         job.SceneId,
         job.File,
         job.VoiceId,
+        job.Percent,
+        // Named so an install still has a row to show before the voice is in the catalog.
+        voiceName = job.Install?.Name,
+        voiceLocale = job.Install?.Locale,
         job.CreatedUtc,
         job.StartedUtc,
         job.FinishedUtc,
@@ -1049,6 +1054,10 @@ partial class Program
         job.Variant,
         job.SceneId,
         job.VoiceId,
+        job.Percent,
+        // A voice being installed has no catalog entry yet, so its name has to travel on the job.
+        voiceName = job.Install?.Name,
+        voiceLocale = job.Install?.Locale,
         job.CreatedUtc,
         job.StartedUtc,
         job.FinishedUtc,

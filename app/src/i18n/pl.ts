@@ -498,6 +498,18 @@ export const pl: Strings = {
   voicesAddInstall: 'Dodaj',
   voicesAddInstalling: 'Dodaję…',
   voicesAddInstallError: 'Nie udało się dodać tego głosu.',
+  /** A voice being installed shows up in the list straight away, with one of these as its status. */
+  voicesStepQueued: 'Czeka na swoją kolej…',
+  voicesStepDownload: 'Pobieram głos…',
+  voicesStepUnpack: 'Rozpakowuję…',
+  voicesStepConvert: 'Przygotowuję Twoje nagranie…',
+  voicesStepLearn: 'Uczę się głosu…',
+  voicesStepSample: 'Nagrywam próbkę…',
+  voicesStepWorking: 'Pracuję…',
+  voicesInstallFailed: 'Nie udało się dodać tego głosu',
+  voicesInstallKeepsGoing: 'To potrwa kilka minut. Możesz zamknąć stronę — praca trwa dalej.',
+  voicesInstallShowDetails: 'Pokaż szczegóły',
+  voicesInstallHideDetails: 'Ukryj szczegóły',
   voicesOffersEmpty: 'Nie ma jeszcze gotowych głosów w tym języku — wgraj nagranie.',
   voicesOffersLoadError: 'Nie udało się pobrać listy głosów.',
   /** Shown on the Add button; {size} is like "64 MB". */

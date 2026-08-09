@@ -497,6 +497,18 @@ export const en = {
   voicesAddInstall: 'Add',
   voicesAddInstalling: 'Adding…',
   voicesAddInstallError: 'Could not add that voice.',
+  /** A voice being installed shows up in the list straight away, with one of these as its status. */
+  voicesStepQueued: 'Waiting its turn…',
+  voicesStepDownload: 'Downloading the voice…',
+  voicesStepUnpack: 'Unpacking…',
+  voicesStepConvert: 'Preparing your recording…',
+  voicesStepLearn: 'Learning the voice…',
+  voicesStepSample: 'Recording a sample…',
+  voicesStepWorking: 'Working…',
+  voicesInstallFailed: 'Could not add this voice',
+  voicesInstallKeepsGoing: 'This takes a few minutes. You can close the page — it keeps going.',
+  voicesInstallShowDetails: 'Show details',
+  voicesInstallHideDetails: 'Hide details',
   voicesOffersEmpty: 'No ready-made voices for this language yet — upload a recording instead.',
   voicesOffersLoadError: 'Could not load the voice list.',
   /** Shown on the Add button; {size} is like "64 MB". */

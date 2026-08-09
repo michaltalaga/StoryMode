@@ -296,14 +296,24 @@ public sealed class JobRunnerService(
                 $"Available: {string.Join(", ", installers.Keys)}.");
         }
 
-        job.Stage = "install";
+        job.Stage = VoiceInstallSteps.Download;
         job.AppendLog($"installing '{request.Name}' ({request.Locale})");
-        var voice = await installer.InstallAsync(request, new DelegateProgress<string>(job.AppendLog), ct);
+
+        // The step drives what the panel says; the detail goes to the log for anyone who opens it.
+        var steps = new DelegateProgress<VoiceInstallStep>(step =>
+        {
+            job.Stage = step.Step;
+            job.Percent = step.Percent;
+            job.AppendLog(step.Detail);
+        });
+
+        var voice = await installer.InstallAsync(request, steps, ct);
         voices.UpsertVoice(voice);
 
         // The invariant that makes play instant: an install is not finished until the voice has a
         // sample on disk. Doing it here, inside the progress bar, is why the play button never waits.
-        job.Stage = "sample";
+        job.Stage = VoiceInstallSteps.Sample;
+        job.Percent = null;
         await EnsureSampleAsync(job, voice, request, ct);
 
         // First voice on a fresh machine becomes the default, so a story can render before anyone

@@ -110,7 +110,7 @@ regenerated implicitly — the user re-runs verification explicitly via the `ver
 | Route | Notes |
 |---|---|
 | `POST /api/stories/{sid}/jobs` | `{type: "transcribe"\|"generate"\|"regenScene"\|"verify"\|"renderTts", variant, sceneId?, feedbackNote?, file?}` → `202 {jobId}`. `previewVoice` and `installVoice` are rejected here — they belong to a voice, not a story (see Voices) |
-| `GET /api/jobs` | all recent jobs: state, stage, storyId, variant, voiceId |
+| `GET /api/jobs` | all recent jobs: state, stage, storyId, variant, voiceId, percent, voiceName, voiceLocale |
 | `GET /api/jobs/{id}` | + log tail (last ~100 lines), cost-so-far, elapsed |
 | `POST /api/jobs/{id}/cancel` | kills process tree / disposes model sessions |
 
@@ -136,6 +136,15 @@ unrelated knobs therefore share one control, and the numbers never reach the cli
 **Installers**: `IVoiceInstaller` per engine turns an offer (or a reader's recording) into an
 installed voice — downloading, unpacking, converting and caching. Registering one is the only step
 needed to add an engine; nothing else, and no configuration file, learns about it.
+
+**Install progress**: installers report a `VoiceInstallStep(Step, Detail, Percent?)`. `Step` is a
+stable key — `download`, `unpack`, `convert`, `learn`, `sample` — that lands on `job.stage` and that
+the UI turns into its own wording; `Detail` goes to the job log for anyone who opens the details;
+`Percent` is set only where a real fraction exists (downloads), because an invented bar is worse
+than an indeterminate one. Installing a cloned voice takes minutes, so the job also carries
+`voiceName`/`voiceLocale`: the catalog entry is written only after conditioning, and the panel has
+to show a row from the moment the reader presses Add. That row is derived from the job list, not
+from client state, so it survives a reload and appears on every device in the house.
 
 A story naming a voice that is not installed **fails loudly**, with a message listing what is
 installed. Substituting another narrator silently would only be discovered by listening.

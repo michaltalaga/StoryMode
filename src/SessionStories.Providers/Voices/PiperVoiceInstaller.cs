@@ -20,7 +20,7 @@ public sealed class PiperVoiceInstaller(
     public string EngineId => engineId;
 
     public async Task<InstalledVoice> InstallAsync(
-        VoiceInstallRequest request, IProgress<string> progress, CancellationToken ct = default)
+        VoiceInstallRequest request, IProgress<VoiceInstallStep> progress, CancellationToken ct = default)
     {
         if (request.SuppliedAudioPath is { Length: > 0 })
         {
@@ -36,7 +36,7 @@ public sealed class PiperVoiceInstaller(
         if (Directory.Exists(bundleDir))
         {
             // Already on disk from an earlier install or the model download script — nothing to fetch.
-            progress.Report("already downloaded");
+            progress.Report(new VoiceInstallStep(VoiceInstallSteps.Download, "already downloaded", 100));
         }
         else
         {
@@ -48,7 +48,7 @@ public sealed class PiperVoiceInstaller(
             await VoiceAssetDownloader.DownloadAsync(http, url, archive, progress, ct);
             try
             {
-                progress.Report("unpacking");
+                progress.Report(new VoiceInstallStep(VoiceInstallSteps.Unpack, "unpacking"));
                 ExtractTarBz2(archive, modelsRoot, ct);
             }
             finally

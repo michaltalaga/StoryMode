@@ -31,6 +31,12 @@ public sealed class JobRecord
 
     public JobState State { get; set; } = JobState.Queued;
     public string Stage { get; set; } = "";
+
+    /// <summary>
+    /// 0–100 for the part of the work that can honestly report one (currently downloads).
+    /// Null means "running, but no meaningful fraction" — better than a bar that invents progress.
+    /// </summary>
+    public int? Percent { get; set; }
     public DateTimeOffset CreatedUtc { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? StartedUtc { get; set; }
     public DateTimeOffset? FinishedUtc { get; set; }

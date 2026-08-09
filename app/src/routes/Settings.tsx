@@ -4,13 +4,14 @@
 // delivery — no engine, no file names, no numbers. Play is a static file, so it starts on the
 // tap; anything that takes time (downloading, learning a voice) happens inside Add, behind a
 // progress bar. The raw voices.json stays reachable under Advanced as the escape hatch.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { ConflictError, getWithETag, putWithETag } from '../api/client'
 import {
   useDeleteVoice,
+  useJob,
   useJobs,
   usePatchVoice,
   usePreviewVoice,
@@ -19,7 +20,7 @@ import {
   useVoices,
   voicePreviewUrl,
 } from '../api/queries'
-import type { VoiceDto } from '../api/types'
+import type { JobDto, VoiceDto } from '../api/types'
 import AddVoiceDialog from '../components/AddVoiceDialog'
 import Flag, { localeLabel } from '../components/Flag'
 import { PlayButton, useSamplePlayer } from '../components/SamplePlayer'
@@ -245,6 +246,122 @@ function VoiceMenu({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  )
+}
+
+/** Install step key → what a person reads. Unknown keys fall back to a neutral "working". */
+function stepLabel(job: JobDto, strings: Strings): string {
+  if (job.state === 'queued') return strings.voicesStepQueued
+  if (job.state === 'failed') return strings.voicesInstallFailed
+  switch (job.stage) {
+    case 'download':
+      return strings.voicesStepDownload
+    case 'unpack':
+      return strings.voicesStepUnpack
+    case 'convert':
+      return strings.voicesStepConvert
+    case 'learn':
+      return strings.voicesStepLearn
+    case 'sample':
+      return strings.voicesStepSample
+    default:
+      return strings.voicesStepWorking
+  }
+}
+
+/**
+ * A voice that is being installed. It occupies the same row shape as a finished one so the list
+ * does not jump when it lands — plain-language status first, and the actual log a tap away for
+ * when "learning the voice" for four minutes stops feeling like progress.
+ */
+function PendingVoiceRow({ job, onDismiss }: { job: JobDto; onDismiss?: () => void }) {
+  const strings = useStrings()
+  const [open, setOpen] = useState(false)
+  // Only the detail route carries the log tail, and only while this row is expanded.
+  const detail = useJob(open ? job.id : '')
+  const failed = job.state === 'failed'
+  const log = detail.data?.logTail ?? []
+
+  return (
+    <li
+      className={`flex items-start gap-3 rounded-xl border p-3 ${
+        failed ? 'border-red-200 bg-red-50' : 'border-violet-200 bg-violet-50/40'
+      }`}
+    >
+      {/* Same 44 px footprint as the play button, so the row keeps its shape when it completes. */}
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white">
+        {failed ? <span className="text-lg text-red-600">!</span> : <Spinner />}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-2">
+          <h3 className="min-w-0 flex-1 break-words font-semibold text-stone-900">
+            {job.voiceName ?? job.voiceId}
+          </h3>
+          {failed && onDismiss !== undefined && (
+            <button
+              type="button"
+              aria-label={strings.close}
+              className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-white hover:text-stone-900"
+              onClick={onDismiss}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-500">
+          {job.voiceLocale != null && job.voiceLocale !== '' && (
+            <>
+              <Flag locale={job.voiceLocale} />
+              <span>{localeLabel(job.voiceLocale, strings)}</span>
+              <span aria-hidden>·</span>
+            </>
+          )}
+          <span className={failed ? 'font-medium text-red-700' : 'font-medium text-violet-700'}>
+            {stepLabel(job, strings)}
+          </span>
+        </p>
+
+        {failed && job.error != null && job.error !== '' && (
+          <p className="mt-1 text-sm leading-snug text-red-800">{job.error}</p>
+        )}
+
+        {!failed && (
+          <>
+            {job.percent != null ? (
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white">
+                <div
+                  className="h-full bg-violet-500 transition-all"
+                  style={{ width: `${job.percent}%` }}
+                />
+              </div>
+            ) : (
+              // No honest fraction to report: an indeterminate bar beats a made-up number.
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white">
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-violet-400" />
+              </div>
+            )}
+            <p className="mt-1 text-xs text-stone-500">{strings.voicesInstallKeepsGoing}</p>
+          </>
+        )}
+
+        <button
+          type="button"
+          aria-expanded={open}
+          className="mt-2 text-xs font-medium text-stone-500 underline underline-offset-2 hover:text-stone-800"
+          onClick={() => setOpen((current) => !current)}
+        >
+          {open ? strings.voicesInstallHideDetails : strings.voicesInstallShowDetails}
+        </button>
+
+        {open && (
+          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-stone-900 p-3 text-[11px] leading-relaxed text-stone-100">
+            {log.length > 0 ? log.join('\n') : strings.loading}
+          </pre>
+        )}
+      </div>
+    </li>
   )
 }
 
@@ -603,20 +720,47 @@ function VoicesSection() {
   const [renaming, setRenaming] = useState<VoiceDto | null>(null)
   const [deleting, setDeleting] = useState<VoiceDto | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  /** Install and re-record jobs we are watching, keyed by voice id. */
-  const [watching, setWatching] = useState<ReadonlyMap<string, string>>(new Map())
+  /** Failed install rows the reader has waved away. */
+  const [dismissedJobs, setDismissedJobs] = useState<ReadonlySet<string>>(new Set())
 
   const voices = useMemo(() => voicesQuery.data ?? [], [voicesQuery.data])
   const jobs = jobsQuery.data
 
-  const jobsById = useMemo(() => new Map((jobs ?? []).map((job) => [job.id, job])), [jobs])
+  const installJobs = useMemo(
+    () => (jobs ?? []).filter((job) => job.type === 'installVoice' && (job.voiceId ?? '') !== ''),
+    [jobs],
+  )
 
-  // Jobs started elsewhere (another tab, another device) still show as busy here.
-  const runningVoiceJobs = useMemo(() => {
+  // Derived from the jobs, not from what this tab happens to remember: a pending voice survives a
+  // reload and shows up on the other devices in the house too.
+  const pendingInstalls = useMemo(
+    () => installJobs.filter((job) => job.state === 'queued' || job.state === 'running'),
+    [installJobs],
+  )
+
+  const installingIds = useMemo(
+    () => new Set(pendingInstalls.map((job) => job.voiceId as string)),
+    [pendingInstalls],
+  )
+
+  // A failed install leaves nothing behind to explain itself, so its row stays until dismissed.
+  const failedInstalls = useMemo(
+    () =>
+      installJobs.filter(
+        (job) =>
+          job.state === 'failed' &&
+          !dismissedJobs.has(job.id) &&
+          !voices.some((voice) => voice.id === job.voiceId),
+      ),
+    [installJobs, dismissedJobs, voices],
+  )
+
+  // Re-recording a sample keeps the finished row in place but disables its play button.
+  const busySamples = useMemo(() => {
     const ids = new Set<string>()
     for (const job of jobs ?? [])
       if (
-        (job.type === 'previewVoice' || job.type === 'installVoice') &&
+        job.type === 'previewVoice' &&
         (job.state === 'queued' || job.state === 'running') &&
         job.voiceId != null &&
         job.voiceId !== ''
@@ -625,33 +769,36 @@ function VoicesSection() {
     return ids
   }, [jobs])
 
-  // A watched job finished: the voice (and its sample) are on disk, so re-read the list.
-  useEffect(() => {
-    if (watching.size === 0) return
-    const settled: string[] = []
-    let failed = false
-    for (const [voiceId, jobId] of watching) {
-      const job = jobsById.get(jobId)
-      if (job === undefined || job.state === 'queued' || job.state === 'running') continue
-      settled.push(voiceId)
-      if (job.state !== 'succeeded') failed = true
-    }
-    if (settled.length === 0) return
+  /** Voice jobs still in flight, as a stable key — install and re-record alike. */
+  const activeVoiceJobs = useMemo(
+    () =>
+      (jobs ?? [])
+        .filter(
+          (job) =>
+            (job.type === 'installVoice' || job.type === 'previewVoice') &&
+            (job.state === 'queued' || job.state === 'running'),
+        )
+        .map((job) => job.id)
+        .sort()
+        .join(','),
+    [jobs],
+  )
+  const previousActiveJobs = useRef<string | null>(null)
 
-    setWatching((current) => {
-      const next = new Map(current)
-      for (const voiceId of settled) next.delete(voiceId)
-      return next
-    })
+  // One of them finished, so the voice and its sample are now on disk. Derived from the jobs
+  // rather than from what this tab queued, so a reload mid-install still updates when it lands.
+  useEffect(() => {
+    const previous = previousActiveJobs.current
+    previousActiveJobs.current = activeVoiceJobs
+    if (previous === null || previous === '' || previous === activeVoiceJobs) return
+
+    const stillRunning = new Set(activeVoiceJobs === '' ? [] : activeVoiceJobs.split(','))
+    if (previous.split(',').every((id: string) => stillRunning.has(id))) return
+
     // A re-recorded sample has the same URL and different bytes.
     player.bump()
     void queryClient.invalidateQueries({ queryKey: ['voices'] })
-    if (failed) setActionError(strings.voicesAddInstallError)
-  }, [watching, jobsById, queryClient, player, strings.voicesAddInstallError])
-
-  const watch = useCallback((voiceId: string, jobId: string) => {
-    setWatching((current) => new Map(current).set(voiceId, jobId))
-  }, [])
+  }, [activeVoiceJobs, player, queryClient])
 
   const run = async (action: Promise<unknown>) => {
     setActionError(null)
@@ -665,8 +812,8 @@ function VoicesSection() {
   const onRerecord = async (voice: VoiceDto) => {
     setActionError(null)
     try {
-      const { jobId } = await rerecord.mutateAsync(voice.id)
-      watch(voice.id, jobId)
+      // The mutation invalidates ['jobs'], so the row picks up its busy state on the next poll.
+      await rerecord.mutateAsync(voice.id)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : strings.voicesSaveError)
     }
@@ -703,34 +850,50 @@ function VoicesSection() {
           </div>
         )}
 
-        {voicesQuery.isSuccess && voices.length === 0 && (
-          <div className="rounded-xl border border-dashed border-stone-300 py-8 text-center">
-            <p className="text-sm text-stone-500">{strings.voicesEmpty}</p>
-            <p className="mt-1 text-xs text-stone-400">{strings.voicesEmptyHint}</p>
-          </div>
-        )}
+        {voicesQuery.isSuccess &&
+          voices.length === 0 &&
+          pendingInstalls.length === 0 &&
+          failedInstalls.length === 0 && (
+            <div className="rounded-xl border border-dashed border-stone-300 py-8 text-center">
+              <p className="text-sm text-stone-500">{strings.voicesEmpty}</p>
+              <p className="mt-1 text-xs text-stone-400">{strings.voicesEmptyHint}</p>
+            </div>
+          )}
 
-        {voices.length > 0 && (
+        {(voices.length > 0 || pendingInstalls.length > 0 || failedInstalls.length > 0) && (
           <ul className="space-y-2">
-            {voices.map((voice) => {
-              const url = voicePreviewUrl(voice.id)
-              return (
-                <VoiceRow
-                  key={voice.id}
-                  voice={voice}
-                  playing={player.playingUrl === url}
-                  busy={watching.has(voice.id) || runningVoiceJobs.has(voice.id)}
-                  onPlay={() => player.toggle(url)}
-                  onSetDefault={() => void run(setDefaultVoice.mutateAsync(voice.id))}
-                  onSetStyle={(style) =>
-                    void run(patchVoice.mutateAsync({ id: voice.id, patch: { style } }))
-                  }
-                  onRename={() => setRenaming(voice)}
-                  onRerecord={() => void onRerecord(voice)}
-                  onDelete={() => setDeleting(voice)}
-                />
-              )
-            })}
+            {/* In-flight and failed installs sit at the top: they are what just changed. */}
+            {pendingInstalls.map((job) => (
+              <PendingVoiceRow key={job.id} job={job} />
+            ))}
+            {failedInstalls.map((job) => (
+              <PendingVoiceRow
+                key={job.id}
+                job={job}
+                onDismiss={() => setDismissedJobs((current) => new Set(current).add(job.id))}
+              />
+            ))}
+            {voices
+              .filter((voice) => !installingIds.has(voice.id))
+              .map((voice) => {
+                const url = voicePreviewUrl(voice.id)
+                return (
+                  <VoiceRow
+                    key={voice.id}
+                    voice={voice}
+                    playing={player.playingUrl === url}
+                    busy={busySamples.has(voice.id)}
+                    onPlay={() => player.toggle(url)}
+                    onSetDefault={() => void run(setDefaultVoice.mutateAsync(voice.id))}
+                    onSetStyle={(style) =>
+                      void run(patchVoice.mutateAsync({ id: voice.id, patch: { style } }))
+                    }
+                    onRename={() => setRenaming(voice)}
+                    onRerecord={() => void onRerecord(voice)}
+                    onDelete={() => setDeleting(voice)}
+                  />
+                )
+              })}
           </ul>
         )}
 
@@ -765,10 +928,8 @@ function VoicesSection() {
       <AddVoiceDialog
         open={adding}
         onClose={() => setAdding(false)}
-        onQueued={(voiceId, jobId) => {
-          watch(voiceId, jobId)
-          setAdding(false)
-        }}
+        // The pending row comes from the job list, so closing is all this has to do.
+        onQueued={() => setAdding(false)}
       />
 
       <RenameDialog

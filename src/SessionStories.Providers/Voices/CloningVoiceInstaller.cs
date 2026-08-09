@@ -22,20 +22,22 @@ public sealed class CloningVoiceInstaller(
     public string EngineId => engineId;
 
     public async Task<InstalledVoice> InstallAsync(
-        VoiceInstallRequest request, IProgress<string> progress, CancellationToken ct = default)
+        VoiceInstallRequest request, IProgress<VoiceInstallStep> progress, CancellationToken ct = default)
     {
         var sourceWav = await ResolveSourceAudioAsync(request, progress, ct);
 
-        progress.Report("preparing the recording");
+        progress.Report(new VoiceInstallStep(VoiceInstallSteps.Convert, "preparing the recording"));
         var voiceWavPath = Path.Combine(voices.VoicesRoot, request.VoiceId + ".wav");
         Directory.CreateDirectory(voices.VoicesRoot);
-        ReferenceAudio.ConvertToWav(sourceWav, voiceWavPath);
+        // The length guidance applies to what a reader recorded, not to a vetted shelf asset.
+        ReferenceAudio.ConvertToWav(sourceWav, voiceWavPath,
+            enforceMinimum: request.SuppliedAudioPath is { Length: > 0 });
         // Any cached conditionals or sample under this id describe a different voice now.
         voices.InvalidateDerived(request.VoiceId);
 
         // Conditioning is the slow part (a full pass over the reference audio) and it is cached
         // per voice, so paying it here means the first real render does not.
-        progress.Report("learning the voice");
+        progress.Report(new VoiceInstallStep(VoiceInstallSteps.Learn, "learning the voice"));
         var engine = engineFactory();
         try
         {
@@ -67,7 +69,7 @@ public sealed class CloningVoiceInstaller(
 
     /// <summary>Reader's own audio wins; otherwise the shelf's wav, shipped or downloaded.</summary>
     private async Task<string> ResolveSourceAudioAsync(
-        VoiceInstallRequest request, IProgress<string> progress, CancellationToken ct)
+        VoiceInstallRequest request, IProgress<VoiceInstallStep> progress, CancellationToken ct)
     {
         if (request.SuppliedAudioPath is { Length: > 0 } supplied)
         {
