@@ -67,6 +67,9 @@ static int Synth(string[] rest)
         ModelDir = modelDir,
         VoiceCacheDir = cacheDir,
         ForceCpu = flags.ContainsKey("cpu"),
+        RepetitionPenalty = flags.TryGetValue("rep-penalty", out var rpText)
+            ? ParseDouble(rpText, "rep-penalty")
+            : 1.2,
     };
 
     using var provider = new ChatterboxOnnxProvider(options)
