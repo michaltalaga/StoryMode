@@ -346,3 +346,38 @@ contract) invalidated a few details:
   a render — the earlier design had play trigger a multi-minute synthesis. Shelf
   samples are pre-rendered by the real engine and committed, so you can hear a voice
   before downloading it, and installing one is a copy.
+
+## Addendum — three more engines, and what measuring them taught (2026-08-10)
+
+`docs/tts-candidates.md` is the survey; this is what changed structurally.
+
+- **The container contract now carries four engines** (XTTS, Qwen, MOSS, Higgs,
+  VibeVoice twice — one image, two models). Adding one is a Dockerfile, an options
+  entry, a `ContainerTtsEngine` registration and a row in `KnownEngines`. No installer
+  and no store changes: `CloningVoiceInstaller` serves anything that clones,
+  `FixedVoiceInstaller` anything that does not.
+- **Each engine owns its weights directory.** They had all shared XTTS's, which had
+  never bitten only because the containers in use were created by hand with the right
+  mount. Image name, container name, port and models directory now all default from
+  the engine's one-word name.
+- **Chunk size belongs to the engine.** VibeVoice is built for long passages and
+  everything else drifts over them. Note the limit: `SentenceChunker` never merges
+  across blank lines, so a story still sends at least one call per paragraph however
+  large the chunk size is set. Merging adjacent paragraphs is the change that would
+  actually make VibeVoice fast, and it belongs in the chunker.
+- **Every generative engine here runs away sooner or later.** MOSS and Higgs both fail
+  to emit an end token on short lines and pad to whatever ceiling they are given; a
+  flat one turns a 34-character line into twenty minutes. Both now scale their ceiling
+  with the text. Assume the next engine does this too.
+- **Time a container engine on its third call, not its first.** The model loads on the
+  first call after a container start, and per-voice state can load on first use of that
+  voice. VibeVoice's Polish voices measured at 0.036× realtime that way and 0.60× once
+  genuinely warm — a seventeen-fold error, in the direction that would have got a
+  working engine written off.
+- **A shelf entry without its sample is a 404 on the play button**, and nothing else in
+  the build looks at those files. `ShelfManifestTests` now checks the shipped manifest:
+  every offer has a sample on disk, and every offer names something an installer could
+  actually use.
+- **`--extra-index-url` is not `--index-url`.** With "extra", PyPI stays primary and pip
+  will happily pair a CUDA 13 torch with a CUDA 12.8 torchaudio, which fails at import
+  rather than at build. Pin the whole torch stack to one index.

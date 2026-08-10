@@ -20,27 +20,45 @@ so the cost of trying one is an afternoon, and the real bottleneck is listening,
 | `xtts-docker` | CPML — **non-commercial** | yes, native | yes | container, CUDA |
 | `qwen-container` | **Apache 2.0** | yes, and only Polish | **no** | container, CUDA |
 | `moss-container` | **Apache 2.0** | yes, 20 langs | yes | container, CUDA |
+| `higgs-container` | research — **non-commercial** | yes, of 102 langs | yes | container, CUDA |
+| `vibevoice-container` | MIT | no — English and Chinese | yes | container, CUDA |
+| `vibevoice-pl-container` | MIT | two fine-tuned voices | **no** | container, CUDA |
 
-Built but not yet heard, so switched off in appsettings — an engine that has never made a sound
-must not appear as something to pick:
-
-| Engine | Licence | Polish | Clones |
-|---|---|---|---|
-| `higgs-container` | research — **non-commercial** | yes, of 102 langs | yes |
-| `vibevoice-container` | MIT | no — English and Chinese | yes |
-| `vibevoice-pl-container` | MIT | two fine-tuned voices | **no** |
-
-Measured on an RTX 4060 Ti, cross-lingual where the reference is English reading Polish:
+Measured on an RTX 4060 Ti, warm, cross-lingual where the reference is English reading Polish:
 
 | Engine | Realtime factor | A twenty-minute story |
 |---|---|---|
 | `piper-onnx` | 39.6× | about 45 seconds |
 | `xtts-docker` | 3.2× | about 6 minutes |
 | `moss-container` | 0.75× | about 27 minutes |
+| `vibevoice-pl-container` | 0.60× | about 33 minutes |
+| `vibevoice-container` | 0.10× short, **0.48× long** | see below |
 | `qwen-container` | 0.15× | over two hours |
+| `higgs-container` | 0.095× | about three and a half hours |
 
 `chatterbox-onnx` has never been timed properly; a nine-second preview took about four minutes
 during voice installs, so it belongs with Qwen rather than with XTTS.
+
+**Both VibeVoice numbers are easy to get wrong, and I got the Polish one wrong first.** Each voice
+loads its cached prompt on first use, and the model itself loads on the first call after a
+container start, so an early measurement is mostly loading. Polish looked like 0.036× across two
+such calls; the same voice on a warm container and a warm prompt renders 7.8 seconds of audio in
+13.1, which is 0.60×. Time a container engine on its third call, not its first.
+
+The English side has a genuine fixed cost rather than a measurement artefact. Two points, 135 and
+1186 characters, fit to roughly **83 seconds per call plus 0.018 seconds per character** — a
+marginal rate of about 2.2× realtime once it is going. Some of that fixed cost is the model being
+built to hold ninety minutes in one pass; some of it is likely this image handing the processor a
+reference *path* on every call, so the recording is re-read and re-encoded each time. Caching the
+encoded reference is the obvious thing to try before anything cleverer.
+
+The catch is that it never gets the chance. `SentenceChunker` splits on blank lines and never
+merges across them, so a story sends at least one call per paragraph however large the chunk size
+is set — sixty paragraphs is eighty minutes of fixed cost before a word is generated. Setting this
+engine's chunk size to paragraph scale therefore buys much less than it appears to. **Merging
+adjacent paragraphs into one generation is the change that would make VibeVoice fast**, and it
+belongs in the chunker rather than the engine: the host inserts the pause between chunks today, so
+a merged chunk would have to carry its own paragraph breaks.
 
 ### What each one turned out to be
 

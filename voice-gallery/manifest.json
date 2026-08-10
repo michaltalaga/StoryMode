@@ -45,6 +45,104 @@
       }
     },
     {
+      "key": "moss/narrator-pl",
+      "name": "Gosia (MOSS)",
+      "description": "Polish, copied from a recording. The only voice here that is both cloned and permissively licensed — slower than Bass, far faster than Qwen. Short lines of dialogue can come out clipped.",
+      "locale": "pl-PL",
+      "downloadBytes": 0,
+      "license": "Apache-2.0",
+      "attribution": "MOSS-TTS (OpenMOSS, Apache 2.0) cloning OHF-Voice pl_PL-gosia (CC0)",
+      "sample": "moss-pl-narrator.mp3",
+      "install": {
+        "engine": "moss-container",
+        "referenceWavFile": "narrator-pl.wav"
+      }
+    },
+    {
+      "key": "moss/narrator-en",
+      "name": "Narrator (MOSS)",
+      "description": "The same reference recording as the built-in narrator, read by the engine that also speaks Polish without a licence to worry about.",
+      "locale": "en-US",
+      "downloadBytes": 0,
+      "license": "Apache-2.0",
+      "attribution": "MOSS-TTS (OpenMOSS, Apache 2.0) cloning the Chatterbox default voice, Resemble AI (MIT)",
+      "sample": "moss-en-narrator.mp3",
+      "install": {
+        "engine": "moss-container",
+        "referenceWavFile": "narrator-en.wav"
+      }
+    },
+    {
+      "key": "vibevoice/pl-agnes",
+      "name": "Agnes",
+      "description": "Polish, female. A voice trained for Polish rather than borrowed from another language. Very slow — closer to an overnight job than an afternoon one for a whole story.",
+      "locale": "pl-PL",
+      "downloadBytes": 0,
+      "license": "MIT",
+      "attribution": "Sticzu pl-Agnes, fine-tuned on Microsoft VibeVoice-Realtime-0.5B; inference code from the VibeVoice community fork (MIT)",
+      "sample": "vibevoice-pl-agnes.mp3",
+      "install": {
+        "engine": "vibevoice-pl-container",
+        "speaker": "agnes"
+      }
+    },
+    {
+      "key": "vibevoice/pl-marek",
+      "name": "Marek",
+      "description": "Polish, male. Agnes's counterpart, and just as slow. Worth hearing them against Bass and Gosia before committing a story to either.",
+      "locale": "pl-PL",
+      "downloadBytes": 0,
+      "license": "MIT",
+      "attribution": "Sticzu pl-Marek, fine-tuned on Microsoft VibeVoice-Realtime-0.5B; inference code from the VibeVoice community fork (MIT)",
+      "sample": "vibevoice-pl-marek.mp3",
+      "install": {
+        "engine": "vibevoice-pl-container",
+        "speaker": "marek"
+      }
+    },
+    {
+      "key": "vibevoice/narrator-en",
+      "name": "Narrator (VibeVoice)",
+      "description": "The built-in narrator's recording, read by a model built for long stretches rather than sentences. Slow to start and then quick, so it suits a whole chapter better than a line.",
+      "locale": "en-US",
+      "downloadBytes": 0,
+      "license": "MIT",
+      "attribution": "VibeVoice-1.5B via the community fork (MIT), cloning the Chatterbox default voice, Resemble AI (MIT)",
+      "sample": "vibevoice-en-narrator.mp3",
+      "install": {
+        "engine": "vibevoice-container",
+        "referenceWavFile": "narrator-en.wav"
+      }
+    },
+    {
+      "key": "higgs/narrator-pl",
+      "name": "Gosia (Higgs)",
+      "description": "Polish, copied from a recording by the model that claims the best Polish of any here. It is also the slowest by a distance: a twenty-minute story would take most of a working day.",
+      "locale": "pl-PL",
+      "downloadBytes": 0,
+      "license": "Research / non-commercial",
+      "attribution": "Higgs TTS 3 (Boson AI, research and non-commercial licence) cloning OHF-Voice pl_PL-gosia (CC0)",
+      "sample": "higgs-pl-narrator.mp3",
+      "install": {
+        "engine": "higgs-container",
+        "referenceWavFile": "narrator-pl.wav"
+      }
+    },
+    {
+      "key": "higgs/narrator-en",
+      "name": "Narrator (Higgs)",
+      "description": "The built-in narrator's recording, read by the same very slow model. Here to be compared against, rather than to read anything long.",
+      "locale": "en-US",
+      "downloadBytes": 0,
+      "license": "Research / non-commercial",
+      "attribution": "Higgs TTS 3 (Boson AI, research and non-commercial licence) cloning the Chatterbox default voice, Resemble AI (MIT)",
+      "sample": "higgs-en-narrator.mp3",
+      "install": {
+        "engine": "higgs-container",
+        "referenceWavFile": "narrator-en.wav"
+      }
+    },
+    {
       "key": "piper/en_US-ryan",
       "name": "Ryan",
       "description": "American English, male. Warm and steady — the closest of these to an audiobook read.",
