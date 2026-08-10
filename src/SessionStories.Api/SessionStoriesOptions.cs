@@ -17,6 +17,8 @@ public sealed class SessionStoriesOptions
     public TtsOptions Tts { get; set; } = new();
     public PiperOptions Piper { get; set; } = new();
     public XttsOptions Xtts { get; set; } = new();
+    public ContainerEngineOptions Moss { get; set; } = new();
+    public ContainerEngineOptions Qwen { get; set; } = new();
     public ClaudeOptions Claude { get; set; } = new();
     public JobsOptions Jobs { get; set; } = new();
 
@@ -48,6 +50,19 @@ public sealed class SessionStoriesOptions
         /// the operator's call, so the engine stays unavailable until this is switched on by hand.
         /// </summary>
         public bool AcceptCoquiLicense { get; set; }
+    }
+
+    /// <summary>
+    /// The permissively-licensed container engines. Apache 2.0 needs no acceptance, so the only
+    /// gate is whether the image has been built — an engine whose image is missing would appear
+    /// as an option and then fail at render time, which is worse than being absent.
+    /// </summary>
+    public sealed class ContainerEngineOptions
+    {
+        public bool Enabled { get; set; }
+        public string Image { get; set; } = "";
+        public string ContainerName { get; set; } = "";
+        public int Port { get; set; }
     }
 
     public sealed class ClaudeOptions

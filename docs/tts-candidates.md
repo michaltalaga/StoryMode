@@ -31,6 +31,7 @@ Measured on an RTX 4060 Ti, cross-lingual (English reference reading Polish): XT
 
 | Engine | Licence | Polish | Clones | Size | Why |
 |---|---|---|---|---|---|
+| **Qwen3-TTS Polish** | **Apache 2.0** | `agnostic/Qwen3-TTS-Polish` — a fine-tune that *adds* Polish | yes | **1.7B** | Smallest of the serious candidates, installs from PyPI (`qwen-tts`) rather than source, and the only one with a **C#/ONNX export** (`elbruno/ElBruno.QwenTTS`) — so if it wins it could eventually drop the container entirely. Revisions `-r9`, `-r10` exist |
 | **MOSS-TTS** | **Apache 2.0** | yes, 20 langs, explicit language tag | yes | 4B local / 8B delay | The only permissive licence that also clones. `MOSS-TTS-Nano` (~100M) runs on 4 CPU cores |
 | **Higgs TTS 3** | research / non-commercial | yes, 100+ langs, WER/CER < 5 | yes | 4B | Best *claimed* Polish of any of them. Served via SGLang-Omni, OpenAI-shaped `/v1/audio/speech` |
 | **VoxPolska-Auralis** | **Apache 2.0** | Polish-*only* fine-tune | **no** | 1B (Llama-3.2 + xcodec2) | A whole model spent on one language. Fixed voice like piper, but LLM-based — may well beat it. Outputs 16 kHz, which is low |
@@ -38,9 +39,6 @@ Measured on an RTX 4060 Ti, cross-lingual (English reference reading Polish): XT
 
 ### Ruled out, with the reason
 
-- **Qwen3-TTS** — clones well and there is even a **C#/.NET ONNX export** (`elbruno/ElBruno.QwenTTS`)
-  which would run in-process with no container at all. But its ten languages are zh, en, ja, ko,
-  de, fr, ru, pt, es, it — **no Polish**. Worth remembering if English ever needs a lighter engine.
 - **VibeVoice** — Microsoft **withdrew the TTS code** from the repository after finding it misused;
   only ASR and `VibeVoice-Realtime-0.5B` remain. The `Sticzu/vibevoice-polish-voices` packs target
   a model whose official inference code is gone. Its long-form design (~90 min single pass) was the

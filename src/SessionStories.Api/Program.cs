@@ -92,6 +92,34 @@ if (options.Xtts.AcceptCoquiLicense)
     });
 }
 
+// Apache-2.0 engines need no acceptance, so the only gate is whether their image exists —
+// enabling one you have not built would make it appear as an option and then fail.
+if (options.Moss.Enabled)
+{
+    containerEngines.Add(new ContainerTtsEngine(
+        Id: "moss-container",
+        Image: string.IsNullOrWhiteSpace(options.Moss.Image) ? "storymode-moss:latest" : options.Moss.Image,
+        ContainerName: string.IsNullOrWhiteSpace(options.Moss.ContainerName) ? "storymode-moss" : options.Moss.ContainerName,
+        Port: options.Moss.Port == 0 ? 8021 : options.Moss.Port,
+        Languages: ["zh", "en", "de", "es", "fr", "ja", "it", "hu", "ko", "ru", "fa", "ar", "pl", "pt", "cs", "da", "sv", "el", "tr"],
+        StylePresets: ContainerStylePresets.Default,
+        LicenceNote: "MOSS-TTS is Apache 2.0; build its image with scripts/build-tts-images.ps1 moss.",
+        Accepted: true));
+}
+if (options.Qwen.Enabled)
+{
+    containerEngines.Add(new ContainerTtsEngine(
+        Id: "qwen-container",
+        Image: string.IsNullOrWhiteSpace(options.Qwen.Image) ? "storymode-qwen:latest" : options.Qwen.Image,
+        ContainerName: string.IsNullOrWhiteSpace(options.Qwen.ContainerName) ? "storymode-qwen" : options.Qwen.ContainerName,
+        Port: options.Qwen.Port == 0 ? 8022 : options.Qwen.Port,
+        // The base model does not speak Polish; this image runs a community fine-tune that does.
+        Languages: ["pl", "en", "de", "fr", "es", "it", "pt", "ru", "ja", "ko", "zh-cn"],
+        StylePresets: ContainerStylePresets.Default,
+        LicenceNote: "Qwen3-TTS is Apache 2.0; build its image with scripts/build-tts-images.ps1 qwen.",
+        Accepted: true));
+}
+
 var ttsFactories = new Dictionary<string, Func<ITtsProvider>>
 {
     ["chatterbox-onnx"] = () => new ChatterboxOnnxProvider(chatterboxOptions),
