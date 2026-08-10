@@ -19,6 +19,8 @@ public sealed class SessionStoriesOptions
     public XttsOptions Xtts { get; set; } = new();
     public ContainerEngineOptions Moss { get; set; } = new();
     public ContainerEngineOptions Qwen { get; set; } = new();
+    public ContainerEngineOptions Higgs { get; set; } = new();
+    public ContainerEngineOptions VibeVoice { get; set; } = new();
     public ClaudeOptions Claude { get; set; } = new();
     public JobsOptions Jobs { get; set; } = new();
 
@@ -53,9 +55,9 @@ public sealed class SessionStoriesOptions
     }
 
     /// <summary>
-    /// The permissively-licensed container engines. Apache 2.0 needs no acceptance, so the only
-    /// gate is whether the image has been built — an engine whose image is missing would appear
-    /// as an option and then fail at render time, which is worse than being absent.
+    /// A container speech engine. <see cref="Enabled"/> says its image has been built — an engine
+    /// whose image is missing would appear as an option and then fail at render time, which is
+    /// worse than being absent. Everything else has a default derived from the engine's name.
     /// </summary>
     public sealed class ContainerEngineOptions
     {
@@ -63,6 +65,16 @@ public sealed class SessionStoriesOptions
         public string Image { get; set; } = "";
         public string ContainerName { get; set; } = "";
         public int Port { get; set; }
+
+        /// <summary>Where this engine's weights live on the host. One directory per engine.</summary>
+        public string ModelsRoot { get; set; } = "";
+
+        /// <summary>
+        /// Engines published under research or non-commercial terms stay unavailable until this is
+        /// switched on by hand, because accepting them is the operator's decision and not this
+        /// code's. Permissively licensed engines ignore it — there is nothing to accept.
+        /// </summary>
+        public bool AcceptLicense { get; set; }
     }
 
     public sealed class ClaudeOptions
@@ -106,8 +118,27 @@ public sealed class SessionStoriesOptions
         Xtts.ModelsRoot = ResolvePath(Xtts.ModelsRoot, Path.Combine(RepoRoot, "models", "xtts"));
         GalleryRoot = ResolvePath(GalleryRoot, Path.Combine(RepoRoot, "voice-gallery"));
 
+        // Each container engine gets its own image name, container name, port and weights
+        // directory, all derived from one word. Spelling them out per engine in configuration was
+        // four near-identical lines each, and the ports had to be kept distinct by hand.
+        ApplyContainerDefaults(Moss, "moss", 8021);
+        ApplyContainerDefaults(Qwen, "qwen", 8022);
+        ApplyContainerDefaults(Higgs, "higgs", 8023);
+        ApplyContainerDefaults(VibeVoice, "vibevoice", 8024);
+
         foreach (var (type, minutes) in DefaultTimeouts)
             Jobs.TimeoutMinutes.TryAdd(type, minutes);
+    }
+
+    private void ApplyContainerDefaults(ContainerEngineOptions engine, string name, int port)
+    {
+        if (string.IsNullOrWhiteSpace(engine.Image))
+            engine.Image = $"storymode-{name}:latest";
+        if (string.IsNullOrWhiteSpace(engine.ContainerName))
+            engine.ContainerName = $"storymode-{name}";
+        if (engine.Port == 0)
+            engine.Port = port;
+        engine.ModelsRoot = ResolvePath(engine.ModelsRoot, Path.Combine(RepoRoot, "models", name));
     }
 
     private string ResolvePath(string configured, string fallback)

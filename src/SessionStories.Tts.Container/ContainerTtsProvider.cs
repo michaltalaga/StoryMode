@@ -198,7 +198,7 @@ public sealed class ContainerTtsProvider(
         if (DockerCaptured("inspect", "-f", "{{.State.Running}}", engine.ContainerName).Trim() == "true")
             return;
 
-        Directory.CreateDirectory(mounts.ModelsRoot);
+        Directory.CreateDirectory(engine.ModelsRoot);
         var args = new List<string>
         {
             "run", "-d",
@@ -206,7 +206,7 @@ public sealed class ContainerTtsProvider(
             "--gpus", "all",
             // Bound to loopback: this is a model server, not something to expose on the LAN.
             "-p", $"127.0.0.1:{engine.Port}:8020",
-            "-v", $"{mounts.ModelsRoot}:/models",
+            "-v", $"{engine.ModelsRoot}:/models",
             "-v", $"{mounts.VoicesRoot}:/voices:ro",
             "--restart", "unless-stopped",
         };

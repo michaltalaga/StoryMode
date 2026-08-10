@@ -67,7 +67,6 @@ var piperOptions = new PiperOptions
 // accepted: an engine that cannot load is worse than an absent one, because it would appear as
 // an option and then fail at render time.
 var containerMounts = new ContainerTtsMounts(
-    ModelsRoot: options.Xtts.ModelsRoot,
     VoicesRoot: Path.Combine(options.LibraryRoot, "voices"));
 // Long timeout: a chunk is seconds, but the first call also waits for the model to load.
 var containerHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(15) };
@@ -80,6 +79,7 @@ if (options.Xtts.AcceptCoquiLicense)
         Image: options.Xtts.Image,
         ContainerName: options.Xtts.ContainerName,
         Port: options.Xtts.Port,
+        ModelsRoot: options.Xtts.ModelsRoot,
         Languages: ["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "ja", "hu", "ko", "hi"],
         StylePresets: ContainerStylePresets.Default,
         LicenceNote:
@@ -98,9 +98,10 @@ if (options.Moss.Enabled)
 {
     containerEngines.Add(new ContainerTtsEngine(
         Id: "moss-container",
-        Image: string.IsNullOrWhiteSpace(options.Moss.Image) ? "storymode-moss:latest" : options.Moss.Image,
-        ContainerName: string.IsNullOrWhiteSpace(options.Moss.ContainerName) ? "storymode-moss" : options.Moss.ContainerName,
-        Port: options.Moss.Port == 0 ? 8021 : options.Moss.Port,
+        Image: options.Moss.Image,
+        ContainerName: options.Moss.ContainerName,
+        Port: options.Moss.Port,
+        ModelsRoot: options.Moss.ModelsRoot,
         Languages: ["zh", "en", "de", "es", "fr", "ja", "it", "hu", "ko", "ru", "fa", "ar", "pl", "pt", "cs", "da", "sv", "el", "tr"],
         StylePresets: ContainerStylePresets.Default,
         LicenceNote: "MOSS-TTS is Apache 2.0; build its image with scripts/build-tts-images.ps1 moss.",
@@ -110,9 +111,10 @@ if (options.Qwen.Enabled)
 {
     containerEngines.Add(new ContainerTtsEngine(
         Id: "qwen-container",
-        Image: string.IsNullOrWhiteSpace(options.Qwen.Image) ? "storymode-qwen:latest" : options.Qwen.Image,
-        ContainerName: string.IsNullOrWhiteSpace(options.Qwen.ContainerName) ? "storymode-qwen" : options.Qwen.ContainerName,
-        Port: options.Qwen.Port == 0 ? 8022 : options.Qwen.Port,
+        Image: options.Qwen.Image,
+        ContainerName: options.Qwen.ContainerName,
+        Port: options.Qwen.Port,
+        ModelsRoot: options.Qwen.ModelsRoot,
         // Polish only in practice: the checkpoint is a Polish fine-tune, but the library's
         // language whitelist has no Polish entry, so the image passes "auto" and the model does
         // the rest. Claiming the base model's ten languages here would be claiming ten failures.
@@ -122,6 +124,68 @@ if (options.Qwen.Enabled)
         Accepted: true,
         // A CustomVoice checkpoint: one built-in speaker, speaker encoder discarded at load.
         Clones: false));
+}
+if (options.Higgs.Enabled)
+{
+    containerEngines.Add(new ContainerTtsEngine(
+        Id: "higgs-container",
+        Image: options.Higgs.Image,
+        ContainerName: options.Higgs.ContainerName,
+        Port: options.Higgs.Port,
+        ModelsRoot: options.Higgs.ModelsRoot,
+        // The model card claims single-digit WER/CER on 102 languages, Polish in the polished
+        // tier. Listed here are the ones a story in this house might plausibly be read in; the
+        // rest are left off because an unlisted language fails loudly rather than quietly
+        // sounding wrong.
+        Languages:
+        [
+            "en", "pl", "de", "fr", "es", "it", "pt", "nl", "sv", "da", "fi",
+            "cs", "sk", "uk", "ru", "hu", "ro", "bg", "hr", "el", "tr", "zh-cn", "ja", "ko",
+        ],
+        StylePresets: ContainerStylePresets.Default,
+        LicenceNote:
+            "Higgs TTS 3 is published under the Boson Higgs TTS 3 Research and Non-Commercial " +
+            "Licence, whose Creator Use Grant covers monetised podcasts and videos provided " +
+            "Boson AI's Higgs Audio is credited. Set SessionStories:Higgs:AcceptLicense to true " +
+            "in appsettings.json if those terms are acceptable to you.",
+        Accepted: options.Higgs.AcceptLicense)
+    {
+        // Unlike the others, the model is loaded by a separate inference server inside the image
+        // rather than lazily on the first request, so the container answers /health only once
+        // that server is serving — and a 4B backbone takes a while to get there.
+        StartupTimeout = TimeSpan.FromMinutes(25),
+    });
+}
+if (options.VibeVoice.Enabled)
+{
+    // Two engines, one image. VibeVoice's long-form model clones and speaks English; Polish
+    // exists only as fine-tuned voices for the streaming model, which has no speaker encoder to
+    // clone with. Different models with different abilities, so: different entries, rather than
+    // one entry that sometimes ignores the recording you gave it.
+    containerEngines.Add(new ContainerTtsEngine(
+        Id: "vibevoice-container",
+        Image: options.VibeVoice.Image,
+        ContainerName: options.VibeVoice.ContainerName,
+        Port: options.VibeVoice.Port,
+        ModelsRoot: options.VibeVoice.ModelsRoot,
+        Languages: ["en", "zh-cn"],
+        StylePresets: ContainerStylePresets.Default,
+        LicenceNote: "VibeVoice is MIT; build its image with scripts/build-tts-images.ps1 vibevoice.",
+        Accepted: true));
+    containerEngines.Add(new ContainerTtsEngine(
+        Id: "vibevoice-pl-container",
+        Image: options.VibeVoice.Image,
+        ContainerName: options.VibeVoice.ContainerName + "-pl",
+        Port: options.VibeVoice.Port + 1,
+        ModelsRoot: options.VibeVoice.ModelsRoot,
+        Languages: ["pl"],
+        StylePresets: ContainerStylePresets.Default,
+        LicenceNote: "VibeVoice is MIT; build its image with scripts/build-tts-images.ps1 vibevoice.",
+        Accepted: true,
+        Clones: false)
+    {
+        Environment = new Dictionary<string, string> { ["VIBEVOICE_MODE"] = "polish" },
+    });
 }
 
 var ttsFactories = new Dictionary<string, Func<ITtsProvider>>

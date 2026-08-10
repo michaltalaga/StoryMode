@@ -17,11 +17,17 @@ namespace SessionStories.Tts.Container;
 /// Qwen's Polish fine-tune ships one trained speaker and discards its speaker encoder entirely —
 /// and claiming otherwise would offer a reference recording that is silently ignored.
 /// </param>
+/// <param name="ModelsRoot">
+/// Host directory holding this engine's weights, mounted at <c>/models</c>. One per engine: they
+/// are several gigabytes each, download on first use, and pointing two engines at one directory
+/// makes each look at the other's half-finished cache.
+/// </param>
 public sealed record ContainerTtsEngine(
     string Id,
     string Image,
     string ContainerName,
     int Port,
+    string ModelsRoot,
     IReadOnlyList<string> Languages,
     IReadOnlyList<TtsStylePreset> StylePresets,
     string LicenceNote,
@@ -36,10 +42,9 @@ public sealed record ContainerTtsEngine(
     public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromMinutes(10);
 }
 
-/// <summary>Host directories the container needs; both are mounted at fixed paths inside it.</summary>
-/// <param name="ModelsRoot">Weights land here (a volume), so rebuilding an image re-downloads nothing.</param>
+/// <summary>The library directories every container sees, whichever engine it runs.</summary>
 /// <param name="VoicesRoot">Reference recordings, mounted read-only — a container never writes to the library.</param>
-public sealed record ContainerTtsMounts(string ModelsRoot, string VoicesRoot);
+public sealed record ContainerTtsMounts(string VoicesRoot);
 
 /// <summary>The delivery presets every container engine offers, over knobs they all understand.</summary>
 public static class ContainerStylePresets

@@ -12,9 +12,32 @@ import os
 import threading
 from pathlib import Path
 
+import numpy as np
+import soundfile
 import torch
+import torchaudio
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
+
+def _read_with_soundfile(path, *_args, **_kwargs):
+    """torchaudio.load, without FFmpeg.
+
+    torchaudio 2.9 no longer decodes anything itself: `load` forwards to torchcodec, whose shared
+    objects link against FFmpeg 7 (libavcodec.so.61). Ubuntu 24.04 — the newest base NVIDIA
+    publishes for CUDA 12.8 — ships FFmpeg 6.1. Installing the -dev packages does not help, because
+    the mismatch is the soname, not a missing header. MOSS reads its reference recording through
+    `torchaudio.load`, deep inside the checkpoint's own remote code, so the only place to intervene
+    is here, before that code is imported.
+
+    libsndfile reads wav without any of that, and reference audio in this app is always wav we
+    wrote ourselves. Returns [channels, samples] float32, which is torchaudio's own contract.
+    """
+    data, sample_rate = soundfile.read(str(path), dtype="float32", always_2d=True)
+    return torch.from_numpy(np.ascontiguousarray(data.T)), sample_rate
+
+
+torchaudio.load = _read_with_soundfile
 
 MODEL_NAME = os.environ.get("MOSS_MODEL", "OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5")
 VOICE_DIR = Path(os.environ.get("MOSS_VOICES", "/models/voices"))
@@ -120,17 +143,25 @@ def synthesize(request: SynthesizeRequest):
                 max_new_tokens=4096,
                 temperature=request.temperature,
             )
-        decoded = processor.decode(outputs)
-        audio = decoded[0].audio_codes_list[0].unsqueeze(0).cpu().to(torch.float32)
+        # `audio_codes_list` is misnamed on the way out: decode() has already run the codes back
+        # through the audio tokenizer, so these are waveforms. Mono, because the host stitches
+        # chunks and encodes the mp3 itself and a stereo pair here would be read as N channels.
+        decoded = processor.decode(outputs, return_stereo=False)
+        spoken = next((m for m in decoded if m is not None), None)
+        segments = [] if spoken is None else [
+            seg.detach().cpu().to(torch.float32).reshape(-1) for seg in spoken.audio_codes_list
+        ]
+        if not segments:
+            raise HTTPException(status_code=502, detail="MOSS generated no audio for this text.")
+        # More than one segment means the model broke the line into separate utterances; they are
+        # consecutive speech, so they belong end to end rather than as one of them dropped.
+        audio = torch.cat(segments) if len(segments) > 1 else segments[0]
         sample_rate = int(processor.model_config.sampling_rate)
-
-    import numpy as np
-    import soundfile
 
     buffer = io.BytesIO()
     soundfile.write(
         buffer,
-        np.asarray(audio.squeeze(0).numpy(), dtype="float32"),
+        np.asarray(audio.numpy(), dtype="float32"),
         sample_rate,
         format="WAV",
         subtype="FLOAT",
