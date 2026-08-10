@@ -8,7 +8,7 @@ namespace SessionStories.Api.Jobs;
 /// In-memory job book-keeping plus the serial work queue the runner drains. Jobs are never
 /// persisted — the durable trace is gen.&lt;variant&gt;.json and the artifacts on disk.
 /// </summary>
-public sealed class JobRegistry
+public sealed class JobRegistry(ILogger<JobRegistry> logger)
 {
     private const int MaxRetained = 200;
 
@@ -21,10 +21,24 @@ public sealed class JobRegistry
 
     public JobRecord Enqueue(JobRecord record)
     {
+        // Everything the panel shows in a job's log goes to the console too, tagged with what it
+        // belongs to. The panel's tail is capped and dies with the process; the console is where
+        // you look when a render has been going for an hour, or when it failed overnight.
+        record.Sink = (job, line) => logger.LogInformation(
+            "[{JobType} {JobId}{Subject}] {Line}", job.Type, job.Id, Subject(job), line);
+
         _jobs[record.Id] = new Entry(record, new CancellationTokenSource());
         TrimRetained();
         _queue.Writer.TryWrite(record.Id);
         return record;
+    }
+
+    /// <summary>Story/variant for pipeline jobs, voice for the ones that belong to a voice.</summary>
+    private static string Subject(JobRecord job)
+    {
+        if (!string.IsNullOrEmpty(job.StoryId))
+            return $" {job.StoryId}/{job.Variant}";
+        return string.IsNullOrEmpty(job.VoiceId) ? "" : $" {job.VoiceId}";
     }
 
     public JobRecord? Get(string id) => _jobs.TryGetValue(id, out var entry) ? entry.Record : null;

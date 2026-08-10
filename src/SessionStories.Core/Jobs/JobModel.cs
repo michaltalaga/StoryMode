@@ -51,6 +51,15 @@ public sealed class JobRecord
 
     public const int LogTailCapacity = 100;
 
+    /// <summary>
+    /// Mirrors every log line somewhere else as it is written — the console, in practice. The tail
+    /// below only keeps the last hundred lines and only exists to be polled by the panel, so
+    /// without this a long render's early progress is gone by the time anyone looks, and nothing
+    /// survives a restart at all. Set by <c>JobRegistry</c>; failures here are swallowed, because
+    /// a broken log sink must never take a render down with it.
+    /// </summary>
+    public Action<JobRecord, string>? Sink { get; set; }
+
     public void AppendLog(string line)
     {
         lock (_gate)
@@ -58,6 +67,15 @@ public sealed class JobRecord
             _log.Enqueue(line);
             while (_log.Count > LogTailCapacity)
                 _log.Dequeue();
+        }
+
+        try
+        {
+            Sink?.Invoke(this, line);
+        }
+        catch
+        {
+            // The job is the point; its logging is not.
         }
     }
 
