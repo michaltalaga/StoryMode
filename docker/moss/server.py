@@ -117,6 +117,12 @@ def prepare(request: PrepareRequest):
 # with a Polish voice: it emits 12.5 audio tokens per second of audio, and reads Polish at about
 # nine characters a second — so a faithful reading costs about 1.4 tokens per character.
 #
+# Three times over is deliberately generous, and it is not free: MOSS often does not stop on its
+# own, and pads to whatever it is allowed. A 148-character line has been seen to spend 162 seconds
+# producing eleven seconds of speech and forty of silence. Tightening this is the obvious lever if
+# whole-story renders turn out too slow — but it trades against readings that stall and recover,
+# so it wants judging by ear, not by the clock.
+#
 # The prompt also has a Tokens field, meant as a length hint. It is left unset on purpose: the
 # model honours it exactly, and every value tried produced a shorter reading padded out to length
 # with silence rather than a fuller one. Being wrong about the number is worse than not answering.
@@ -128,10 +134,9 @@ def token_budget(text: str) -> int:
     """The hard stop for one line.
 
     A flat ceiling is not a safety net. Given a very short line — a one-word answer in dialogue —
-    MOSS does not reliably emit an end token, and a flat 4096 then buys half an hour per chunk,
-    which is how a story render turns into an overnight job. Scaling the ceiling with the text
-    keeps the failure proportional: a line that should take three seconds is cut off after ten,
-    not after twenty minutes.
+    MOSS does not reliably emit an end token, and a flat 4096 then buys half an hour on that one
+    line, which is how a story render turns into an overnight job. Scaling the ceiling with the
+    text keeps the failure proportional.
     """
     return max(192, min(MAX_TOKENS, round(len(text) * TOKENS_PER_CHAR)))
 
@@ -234,9 +239,10 @@ def synthesize(request: SynthesizeRequest):
         # consecutive speech, so they belong end to end rather than as one of them dropped.
         audio = torch.cat(segments) if len(segments) > 1 else segments[0]
         sample_rate = int(processor.model_config.sampling_rate)
-        # Several generations in a row otherwise creep toward the card's limit and start thrashing.
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # No empty_cache() here. It was added to stop VRAM creeping across chunks, but the creep
+        # was the runaway generation that the token budget now prevents, and releasing the caching
+        # allocator every chunk makes every later allocation a fresh cudaMalloc — measurably
+        # slower for nothing.
 
     raw = np.asarray(audio.numpy(), dtype="float32")
     spoken = close_long_gaps(raw, sample_rate)
