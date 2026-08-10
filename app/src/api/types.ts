@@ -148,6 +148,12 @@ export interface VoiceDto {
   hasSample: boolean;
   attribution: string;
   license: string;
+  /**
+   * Which model reads in this voice, by the name a person would use for it — "MOSS-TTS", not
+   * "moss-container". Two voices can share a recording and sound nothing alike, so this is often
+   * the only thing that distinguishes them in a list.
+   */
+  engine: string;
 }
 
 /**

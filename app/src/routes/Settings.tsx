@@ -371,6 +371,15 @@ function VoiceRow({
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-500">
           <Flag locale={voice.locale} />
           <span>{localeLabel(voice.locale, strings)}</span>
+          {/* Which model reads in this voice. Two voices can share one recording and sound
+              nothing alike, so without this the list has rows you cannot tell apart. Guarded
+              because a reloaded page can briefly meet an API that predates the field. */}
+          {voice.engine && (
+            <>
+              <span aria-hidden>·</span>
+              <span>{voice.engine}</span>
+            </>
+          )}
         </p>
         {voice.description.length > 0 && (
           <p className="mt-1 text-sm leading-snug text-stone-500">{voice.description}</p>

@@ -85,7 +85,10 @@ export default function RenderAudioDialog({
                 >
                   {voices.map((voice) => (
                     <option key={voice.id} value={voice.id}>
+                      {/* The model belongs here too: picking a voice for a render is picking how
+                          long it will take and how it will sound, and the name alone says neither. */}
                       {`${voice.name} — ${localeLabel(voice.locale, strings)}`}
+                      {voice.engine ? ` · ${voice.engine}` : ''}
                     </option>
                   ))}
                 </select>

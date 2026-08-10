@@ -1085,7 +1085,18 @@ static object VoiceView(IVoiceStore voices, IReadOnlyDictionary<string, TtsCapab
     hasSample = File.Exists(voices.PreviewPath(voice.Id)),
     attribution = voice.Source?.Attribution ?? "",
     license = voice.Source?.License ?? "",
+    // Which model reads in this voice, by the name a person would use for it. Two voices can
+    // share a recording and sound nothing alike, so this is the difference between them.
+    engine = EngineName(voice.EngineId),
 };
+
+/// <summary>
+/// The engine register's name for an id. Falls back to the id, which is a bug rather than a
+/// display: it means an engine was registered without being added to <c>KnownEngines</c>, and the
+/// panel will show something like "moss-container" until it is.
+/// </summary>
+static string EngineName(string engineId)
+    => Program.KnownEngines.FirstOrDefault(known => known.Id == engineId)?.Name ?? engineId;
 
 static string ContentTypeForText(string name)
     => name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)

@@ -47,7 +47,7 @@ Installed voices:
 
 | Route | Notes |
 |---|---|
-| `GET /api/voices` | `[{id, name, description, locale, styles[], isDefault, hasSample, attribution, license}]` — `[]` when no catalog. `id` is the stable key stories point at and is never displayed; `styles` lists the deliveries this voice's engine can do, which is options rather than a setting (see Delivery below) |
+| `GET /api/voices` | `[{id, name, description, locale, styles[], isDefault, hasSample, attribution, license, engine}]` — `[]` when no catalog. `id` is the stable key stories point at and is never displayed; `styles` lists the deliveries this voice's engine can do, which is options rather than a setting (see Delivery below); `engine` is the model's display name from the engine register — `"MOSS-TTS"`, never `"moss-container"` — because two voices can share one recording and sound nothing alike |
 | `PATCH /api/voices/{id}` | `{name?, description?}` — the only fields a reader may change. `200` with the item; 400 on an empty name, 404 when not installed |
 | `DELETE /api/voices/{id}?deleteWav=` | `204`. Removes the entry, its `library/voice-previews/<id>.mp3` and its `library/voice-cache/<id>` folder, and clears `default` when it pointed here. The reference recording may back several voices, so it stays unless `deleteWav=true`. 404 when absent |
 | `PUT /api/voices/default` | `{id}` → `204`; 404 when not installed |
