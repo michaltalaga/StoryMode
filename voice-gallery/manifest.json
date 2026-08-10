@@ -17,6 +17,34 @@
       }
     },
     {
+      "key": "xtts/narrator-en",
+      "name": "Narrator (XTTS)",
+      "description": "The same reference recording as the built-in narrator, read by a different engine. Slower to add — it learns the voice — but it also speaks Polish, Russian, German and thirteen more.",
+      "locale": "en-US",
+      "downloadBytes": 0,
+      "license": "CPML (non-commercial)",
+      "attribution": "XTTS-v2 (Coqui, CPML) cloning the Chatterbox default voice, Resemble AI (MIT)",
+      "sample": "xtts-en-narrator.mp3",
+      "install": {
+        "engine": "xtts-docker",
+        "referenceWavFile": "narrator-en.wav"
+      }
+    },
+    {
+      "key": "xtts/narrator-pl",
+      "name": "Gosia (XTTS)",
+      "description": "A Polish speaker, cloned rather than trained — the first Polish voice here that is not a fixed model. Compare it against Bass before deciding.",
+      "locale": "pl-PL",
+      "downloadBytes": 0,
+      "license": "CPML (non-commercial)",
+      "attribution": "XTTS-v2 (Coqui, CPML) cloning OHF-Voice pl_PL-gosia (CC0)",
+      "sample": "xtts-pl-narrator.mp3",
+      "install": {
+        "engine": "xtts-docker",
+        "referenceWavFile": "narrator-pl.wav"
+      }
+    },
+    {
       "key": "piper/en_US-ryan",
       "name": "Ryan",
       "description": "American English, male. Warm and steady — the closest of these to an audiobook read.",
