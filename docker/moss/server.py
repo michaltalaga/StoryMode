@@ -113,6 +113,83 @@ def prepare(request: PrepareRequest):
     return {"voiceId": request.voiceId, "cached": str(target)}
 
 
+# Audio tokens per character, at three times what a real reading needs. Measured on this model
+# with a Polish voice: it emits 12.5 audio tokens per second of audio, and reads Polish at about
+# nine characters a second — so a faithful reading costs about 1.4 tokens per character.
+#
+# The prompt also has a Tokens field, meant as a length hint. It is left unset on purpose: the
+# model honours it exactly, and every value tried produced a shorter reading padded out to length
+# with silence rather than a fuller one. Being wrong about the number is worse than not answering.
+TOKENS_PER_CHAR = float(os.environ.get("MOSS_TOKENS_PER_CHAR", "4.2"))
+MAX_TOKENS = 4096
+
+
+def token_budget(text: str) -> int:
+    """The hard stop for one line.
+
+    A flat ceiling is not a safety net. Given a very short line — a one-word answer in dialogue —
+    MOSS does not reliably emit an end token, and a flat 4096 then buys half an hour per chunk,
+    which is how a story render turns into an overnight job. Scaling the ceiling with the text
+    keeps the failure proportional: a line that should take three seconds is cut off after ten,
+    not after twenty minutes.
+    """
+    return max(192, min(MAX_TOKENS, round(len(text) * TOKENS_PER_CHAR)))
+
+
+# Set to 0 to keep the audio exactly as generated — the way to see what this is changing.
+MAX_GAP_SECONDS = float(os.environ.get("MOSS_MAX_GAP_SECONDS", "1.0"))
+PAUSE_SECONDS = 0.35
+
+
+def close_long_gaps(audio, sample_rate, max_gap=MAX_GAP_SECONDS, floor=0.005):
+    """Shortens over-long silences inside one chunk, and drops the silence at either end.
+
+    MOSS stalls mid-line and then resumes. Measured three times over on
+    "Wdzięczna, zgodził się starszy wioski.": one second of speech, three of silence, then another
+    second and a half — and the two bursts together come to the same length as the runs where it
+    read the line straight through. So the gap is an artefact and the second burst is the rest of
+    the sentence, which is why this closes the gap rather than cutting at it. Truncating there
+    would have thrown away half of every line it happened to.
+
+    A chunk is at most one paragraph, and the host puts its own pause between chunks, so a second
+    of silence inside one is never something the reading asked for.
+    """
+    if max_gap <= 0 or len(audio) == 0:
+        return audio
+
+    frame = max(1, int(sample_rate * 0.05))
+    frames = len(audio) // frame
+    if frames == 0:
+        return audio
+
+    loud = np.array([
+        np.sqrt(np.mean(np.square(audio[i * frame:(i + 1) * frame]))) > floor
+        for i in range(frames)
+    ])
+    if not loud.any():
+        return audio
+
+    keep = max(1, int(PAUSE_SECONDS / 0.05))
+    limit = max(keep, int(max_gap / 0.05))
+    first, last = int(loud.argmax()), frames - int(loud[::-1].argmax())
+
+    pieces, run = [], 0
+    for index in range(first, last):
+        if loud[index]:
+            if run > limit:
+                # A gap this long is an artefact; leave a breath in its place.
+                pieces.append(audio[(index - keep) * frame:index * frame])
+            elif run:
+                pieces.append(audio[(index - run) * frame:index * frame])
+            pieces.append(audio[index * frame:(index + 1) * frame])
+            run = 0
+        else:
+            run += 1
+    # A little air after the last word, and nothing of the silence the model padded the rest with.
+    pieces.append(audio[last * frame:min(len(audio), last * frame + int(sample_rate * 0.15))])
+    return np.concatenate(pieces) if pieces else audio
+
+
 class SynthesizeRequest(BaseModel):
     voiceId: str
     text: str
@@ -140,16 +217,16 @@ def synthesize(request: SynthesizeRequest):
             outputs = model.generate(
                 input_ids=batch["input_ids"].to(_device),
                 attention_mask=batch["attention_mask"].to(_device),
-                max_new_tokens=4096,
+                max_new_tokens=token_budget(request.text),
                 temperature=request.temperature,
             )
         # `audio_codes_list` is misnamed on the way out: decode() has already run the codes back
         # through the audio tokenizer, so these are waveforms. Mono, because the host stitches
         # chunks and encodes the mp3 itself and a stereo pair here would be read as N channels.
         decoded = processor.decode(outputs, return_stereo=False)
-        spoken = next((m for m in decoded if m is not None), None)
-        segments = [] if spoken is None else [
-            seg.detach().cpu().to(torch.float32).reshape(-1) for seg in spoken.audio_codes_list
+        generated = next((m for m in decoded if m is not None), None)
+        segments = [] if generated is None else [
+            seg.detach().cpu().to(torch.float32).reshape(-1) for seg in generated.audio_codes_list
         ]
         if not segments:
             raise HTTPException(status_code=502, detail="MOSS generated no audio for this text.")
@@ -157,15 +234,22 @@ def synthesize(request: SynthesizeRequest):
         # consecutive speech, so they belong end to end rather than as one of them dropped.
         audio = torch.cat(segments) if len(segments) > 1 else segments[0]
         sample_rate = int(processor.model_config.sampling_rate)
+        # Several generations in a row otherwise creep toward the card's limit and start thrashing.
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    raw = np.asarray(audio.numpy(), dtype="float32")
+    spoken = close_long_gaps(raw, sample_rate)
+    # Printed so the budget and the trim both stay honest: if generated length routinely sits at
+    # the ceiling, or the trim routinely removes half the audio, the logs will say so.
+    print(
+        f"[moss] {len(request.text)} chars, capped at {token_budget(request.text)} tokens, "
+        f"{len(raw) / sample_rate:.1f}s generated, {len(spoken) / sample_rate:.1f}s kept",
+        flush=True,
+    )
 
     buffer = io.BytesIO()
-    soundfile.write(
-        buffer,
-        np.asarray(audio.numpy(), dtype="float32"),
-        sample_rate,
-        format="WAV",
-        subtype="FLOAT",
-    )
+    soundfile.write(buffer, spoken, sample_rate, format="WAV", subtype="FLOAT")
     return {
         "sampleRate": sample_rate,
         "wavBase64": base64.b64encode(buffer.getvalue()).decode("ascii"),
