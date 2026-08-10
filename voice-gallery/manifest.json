@@ -17,18 +17,93 @@
       }
     },
     {
+      "key": "piper/en_US-ryan",
+      "name": "Ryan",
+      "description": "American English, male. Warm and steady — the closest of these to an audiobook read.",
+      "locale": "en-US",
+      "downloadBytes": 115630708,
+      "license": "MIT",
+      "attribution": "Piper voice en_US-ryan-high (rhasspy), packaged by sherpa-onnx",
+      "sample": "piper-en-ryan.mp3",
+      "install": {
+        "engine": "piper-onnx",
+        "bundle": "vits-piper-en_US-ryan-high",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-ryan-high.tar.bz2"
+      }
+    },
+    {
+      "key": "piper/en_GB-cori",
+      "name": "Cori",
+      "description": "British English, female. Crisp and even.",
+      "locale": "en-GB",
+      "downloadBytes": 115574061,
+      "license": "MIT",
+      "attribution": "Piper voice en_GB-cori-high (rhasspy), packaged by sherpa-onnx",
+      "sample": "piper-en-cori.mp3",
+      "install": {
+        "engine": "piper-onnx",
+        "bundle": "vits-piper-en_GB-cori-high",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_GB-cori-high.tar.bz2"
+      }
+    },
+    {
       "key": "piper/en_US-lessac",
       "name": "Lessac",
-      "description": "American English. Clearer and quicker than the narrator, and flatter — better for long stretches than for drama.",
+      "description": "American English, female. Clear and brisk; flatter than Ryan, easier for long stretches than for drama.",
       "locale": "en-US",
-      "downloadBytes": 67230653,
+      "downloadBytes": 115545841,
       "license": "MIT",
-      "attribution": "Piper voice en_US-lessac-medium (rhasspy), packaged by sherpa-onnx",
+      "attribution": "Piper voice en_US-lessac-high (rhasspy), packaged by sherpa-onnx",
       "sample": "piper-en-lessac.mp3",
       "install": {
         "engine": "piper-onnx",
-        "bundle": "vits-piper-en_US-lessac-medium",
-        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2"
+        "bundle": "vits-piper-en_US-lessac-high",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-high.tar.bz2"
+      }
+    },
+    {
+      "key": "piper/pl_PL-bass",
+      "name": "Bass",
+      "description": "Polish, male. The only high-quality-tier Polish voice available — try this one first.",
+      "locale": "pl-PL",
+      "downloadBytes": 115576949,
+      "license": "MIT",
+      "attribution": "Piper voice pl_PL-bass-high (rhasspy), packaged by sherpa-onnx",
+      "sample": "piper-pl-bass.mp3",
+      "install": {
+        "engine": "piper-onnx",
+        "bundle": "vits-piper-pl_PL-bass-high",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-pl_PL-bass-high.tar.bz2"
+      }
+    },
+    {
+      "key": "piper/pl_PL-mc_speech",
+      "name": "MC Speech",
+      "description": "Polish, male. A different reader from Bass and Darkman — worth comparing.",
+      "locale": "pl-PL",
+      "downloadBytes": 67234285,
+      "license": "MIT",
+      "attribution": "Piper voice pl_PL-mc_speech-medium (rhasspy), packaged by sherpa-onnx",
+      "sample": "piper-pl-mcspeech.mp3",
+      "install": {
+        "engine": "piper-onnx",
+        "bundle": "vits-piper-pl_PL-mc_speech-medium",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-pl_PL-mc_speech-medium.tar.bz2"
+      }
+    },
+    {
+      "key": "coqui/pl-mai_female",
+      "name": "Mai",
+      "description": "Polish, female. A different family from the others — no phoneme dictionary, so it reads the letters directly. Worth hearing against Bass.",
+      "locale": "pl-PL",
+      "downloadBytes": 67062377,
+      "license": "MPL-2.0",
+      "attribution": "Coqui VITS pl-mai_female, packaged by sherpa-onnx",
+      "sample": "coqui-pl-mai.mp3",
+      "install": {
+        "engine": "piper-onnx",
+        "bundle": "vits-coqui-pl-mai_female",
+        "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-coqui-pl-mai_female.tar.bz2"
       }
     },
     {

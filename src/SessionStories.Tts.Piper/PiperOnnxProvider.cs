@@ -16,6 +16,9 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
     // Bundle folder names carry a locale segment, e.g. "vits-piper-pl_PL-gosia-medium" → "pl".
     private static readonly Regex BundleLocale = new(@"\b([a-z]{2,3})_[A-Z]{2}\b", RegexOptions.Compiled);
 
+    // Coqui bundles name the language on its own instead: "vits-coqui-pl-mai_female" → "pl".
+    private static readonly Regex CoquiLocale = new(@"^vits-coqui-([a-z]{2,3})-", RegexOptions.Compiled);
+
     public string Id => "piper-onnx";
 
     public TtsCapabilities Capabilities { get; } = DescribeCapabilities(options);
@@ -83,7 +86,12 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
         var config = new OfflineTtsConfig();
         config.Model.Vits.Model = SingleOnnxFile(bundleDir, bundleName);
         config.Model.Vits.Tokens = RequiredFile(bundleDir, "tokens.txt", bundleName);
-        config.Model.Vits.DataDir = RequiredDir(bundleDir, "espeak-ng-data", bundleName);
+        // Phonemiser data is optional: piper bundles carry espeak-ng-data and pronounce via
+        // phonemes, while coqui bundles are character-based and ship none. Requiring it would
+        // reject a whole family of voices for having a different (not worse) text frontend.
+        var espeak = Path.Combine(bundleDir, "espeak-ng-data");
+        if (Directory.Exists(espeak))
+            config.Model.Vits.DataDir = espeak;
         // NoiseScale/NoiseScaleW/LengthScale keep the sherpa defaults (0.667/0.8/1.0), which
         // match the values piper trained with; "speed" is passed per Generate call instead.
         config.Model.NumThreads = Math.Clamp(Environment.ProcessorCount, 1, 8);
@@ -158,16 +166,10 @@ public sealed class PiperOnnxProvider(PiperOptions options) : ITtsProvider
             : throw new FileNotFoundException($"Piper bundle '{bundleName}' is missing '{name}'.", path);
     }
 
-    private static string RequiredDir(string bundleDir, string name, string bundleName)
-    {
-        var path = Path.Combine(bundleDir, name);
-        return Directory.Exists(path)
-            ? path
-            : throw new DirectoryNotFoundException($"Piper bundle '{bundleName}' is missing the '{name}' directory ('{path}').");
-    }
-
     private static string? LanguageFromBundle(string bundleName)
-        => BundleLocale.Match(bundleName) is { Success: true } match ? match.Groups[1].Value : null;
+        => BundleLocale.Match(bundleName) is { Success: true } locale ? locale.Groups[1].Value
+            : CoquiLocale.Match(bundleName) is { Success: true } coqui ? coqui.Groups[1].Value
+            : null;
 
     private static double Knob(TtsRequest request, string name, double fallback)
         => request.Knobs is not null && request.Knobs.TryGetValue(name, out var value) ? value : fallback;

@@ -176,13 +176,26 @@ function OfferRow({
     <li className="flex items-start gap-3 rounded-xl border border-stone-200 bg-white p-3">
       <PlayButton playing={playing} label={offer.name} onClick={onPlay} />
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-stone-900">{offer.name}</p>
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <p className="font-medium text-stone-900">{offer.name}</p>
+          {/* Where it came from. Normally an implementation detail, but while families are being
+              compared against each other it is the whole point of the comparison. */}
+          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
+            {offer.key.split('/')[0]}
+          </span>
+        </div>
         <p className="mt-0.5 text-sm leading-snug text-stone-500">{offer.description}</p>
         <p className="mt-1 text-xs text-stone-400">
           {offer.downloadBytes > 0
             ? format(strings.voicesDownloadSize, { size: formatBytes(offer.downloadBytes) })
             : strings.voicesDownloadNone}
         </p>
+        {offer.attribution.length > 0 && (
+          <p className="mt-0.5 break-words text-[11px] leading-snug text-stone-400">
+            {offer.attribution}
+            {offer.license.length > 0 ? ` · ${offer.license}` : ''}
+          </p>
+        )}
       </div>
       <button type="button" className={`${btnGhost} shrink-0`} disabled={installing} onClick={onAdd}>
         {installing ? <Spinner /> : null}
