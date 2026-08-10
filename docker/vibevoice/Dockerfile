@@ -23,7 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu128 \
+# --index-url, not --extra-index-url: with "extra", PyPI stays the primary index and pip takes the
+# newest torch it finds there — a CUDA 13 build — while torchaudio comes from the CUDA 12.8 index,
+# and importing torchaudio then refuses outright over the mismatch. Only this index has both.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 \
         torch torchaudio \
     && git clone --depth 1 https://github.com/vibevoice-community/VibeVoice.git /opt/vibevoice \
     && pip install --no-cache-dir -e /opt/vibevoice \

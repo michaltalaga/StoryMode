@@ -22,8 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# --index-url, not --extra-index-url: with "extra", PyPI stays the primary index and pip takes the
+# newest torch it finds there — a CUDA 13 build — while torchaudio comes from the CUDA 12.8 index,
+# and importing torchaudio then refuses outright over the mismatch. Only this index has both.
 # transformers 5.5 or newer: the remote code uses APIs that do not exist before it.
-RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu128 \
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 \
         torch torchaudio \
     && pip install --no-cache-dir "transformers>=5.5" accelerate \
         "fastapi==0.115.6" "uvicorn[standard]==0.34.0" soundfile
