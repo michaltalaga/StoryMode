@@ -23,6 +23,7 @@ import type {
   UniverseListItem,
   UniversePendingFact,
   VoiceDto,
+  VoiceEngineDto,
   VoiceLanguageDto,
   VoiceOfferDto,
   VoicePatch,
@@ -253,6 +254,15 @@ export function usePreviewVoice() {
   return useMutation({
     mutationFn: previewVoice,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+}
+
+/** Every engine this build knows about, including the ones switched off. */
+export function useVoiceEngines() {
+  return useQuery({
+    queryKey: ['voice-engines'],
+    queryFn: () => getJson<VoiceEngineDto[]>('/api/voices/engines'),
+    staleTime: Infinity,
   });
 }
 

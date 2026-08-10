@@ -150,6 +150,26 @@ export interface VoiceDto {
   license: string;
 }
 
+/**
+ * GET /api/voices/engines item — every speech engine this build knows about, switched off ones
+ * included, so "what can this machine do and what would it take to do more" is answerable in the
+ * panel rather than by reading source.
+ */
+export interface VoiceEngineDto {
+  id: string;
+  name: string;
+  /** 'builtin' runs in the app; 'container' runs in Docker. */
+  kind: string;
+  licence: string;
+  clones: boolean;
+  languages: string[];
+  speaksPolish: boolean;
+  /** 'ready' | 'disabled' | 'licence' */
+  state: string;
+  /** What to do about it when it is not ready. */
+  note: string;
+}
+
 /** GET /api/voice-gallery/languages item — step one of "add a voice". */
 export interface VoiceLanguageDto {
   locale: string;

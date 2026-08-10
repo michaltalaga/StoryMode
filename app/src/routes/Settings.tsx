@@ -17,6 +17,7 @@ import {
   usePreviewVoice,
   useSetDefaultVoice,
   useStatus,
+  useVoiceEngines,
   useVoices,
   voicePreviewUrl,
 } from '../api/queries'
@@ -904,6 +905,81 @@ function VoicesSection() {
   )
 }
 
+/**
+ * The engine register. Every engine the build knows about, switched-off ones included — this
+ * section exists because adding an engine used to be invisible until someone hand-wrote a shelf
+ * entry for it, so "what can this machine do" was only answerable by reading source.
+ *
+ * Read-only on purpose: enabling one needs a container image built on the host, which is not
+ * something a web page can honestly offer to do.
+ */
+function EnginesSection() {
+  const strings = useStrings()
+  const query = useVoiceEngines()
+  const [open, setOpen] = useState(false)
+  const engines = query.data ?? []
+  const ready = engines.filter((engine) => engine.state === 'ready')
+
+  return (
+    <section className="rounded-xl border border-stone-200 bg-white px-4">
+      <h2 className="border-b border-stone-100 py-3 text-sm font-semibold uppercase tracking-wide text-stone-400">
+        {strings.enginesHeading}
+      </h2>
+      <div className="py-4">
+        <p className="text-sm text-stone-600">
+          {format(strings.enginesSummary, { ready: String(ready.length), total: String(engines.length) })}
+        </p>
+        <button
+          type="button"
+          aria-expanded={open}
+          className={`${btnCard} mt-3 text-stone-600`}
+          onClick={() => setOpen((current) => !current)}
+        >
+          {open ? strings.enginesHide : strings.enginesShow}
+        </button>
+
+        {open && (
+          <ul className="mt-3 space-y-2">
+            {engines.map((engine) => (
+              <li
+                key={engine.id}
+                className={`rounded-xl border p-3 ${
+                  engine.state === 'ready' ? 'border-emerald-200 bg-emerald-50/40' : 'border-stone-200'
+                }`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-stone-900">{engine.name}</span>
+                  <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
+                    {engine.licence}
+                  </span>
+                  {engine.state === 'ready' ? (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                      {strings.engineReady}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-500">
+                      {engine.state === 'licence' ? strings.engineLicence : strings.engineOff}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-stone-500">
+                  {engine.clones ? strings.engineClones : strings.engineFixedVoices}
+                  {' · '}
+                  {format(strings.engineLanguages, { count: String(engine.languages.length) })}
+                  {engine.speaksPolish ? ` · ${strings.enginePolish}` : ''}
+                </p>
+                {engine.note.length > 0 && (
+                  <p className="mt-1 text-xs leading-snug text-amber-700">{engine.note}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export default function Settings() {
   const strings = useStrings()
   const query = useStatus()
@@ -920,6 +996,7 @@ export default function Settings() {
       <div className="mb-6 space-y-6">
         <LanguageSection />
         <VoicesSection />
+        <EnginesSection />
       </div>
 
       {query.isLoading && <p className="py-8 text-center text-sm text-stone-500">{strings.loading}</p>}

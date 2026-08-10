@@ -10,8 +10,13 @@
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+# The libav* development packages are not optional: transformers pulls in torchcodec to read the
+# reference audio, and torchcodec links against those shared libraries. The ffmpeg binary alone
+# gets you as far as a model that loads and then fails on the first generation.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.12 python3.12-venv python3-pip git ffmpeg libsndfile1 ca-certificates \
+        python3.12 python3.12-venv python3-pip git ca-certificates \
+        ffmpeg libsndfile1 \
+        libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libavfilter-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Ubuntu 24.04 marks the system python as externally managed; a venv is the sanctioned way in.

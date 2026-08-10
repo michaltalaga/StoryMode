@@ -428,6 +428,21 @@ export const en = {
   languageNameEn: 'English',
   languageNamePl: 'Polski',
 
+  // --- Settings: the engine register ---
+  enginesHeading: 'Speech engines',
+  /** {ready} of {total} are switched on. */
+  enginesSummary: '{ready} of {total} engines are available on this machine.',
+  enginesShow: 'Show the engines',
+  enginesHide: 'Hide the engines',
+  engineReady: 'available',
+  engineOff: 'not enabled',
+  engineLicence: 'needs a licence decision',
+  engineClones: 'copies a voice from a recording',
+  engineFixedVoices: 'fixed trained voices',
+  /** {count} is how many languages it speaks. */
+  engineLanguages: '{count} languages',
+  enginePolish: 'speaks Polish',
+
   // --- Settings: voices ---
   settingsVoicesHeading: 'Voices',
   settingsVoicesHint: 'Every story is read by one of these. Press play to hear one.',

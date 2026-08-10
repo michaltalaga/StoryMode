@@ -314,6 +314,30 @@ api.MapPut("/voices/default", (SetDefaultVoiceRequest request, IVoiceStore voice
         : Problem(404, $"Voice '{request.Id}' is not installed");
 });
 
+// Every speech engine this build knows about, including the ones that are switched off — so
+// "what can this machine do, and what would it take to do more" is answerable from the panel
+// instead of by reading appsettings and a docs page.
+api.MapGet("/voices/engines", (IReadOnlyDictionary<string, TtsCapabilities> ttsCapabilities) =>
+    Results.Ok(Program.KnownEngines.Select(known =>
+    {
+        var live = ttsCapabilities.GetValueOrDefault(known.Id);
+        return new
+        {
+            id = known.Id,
+            name = known.Name,
+            kind = known.Kind,
+            licence = known.Licence,
+            // Capabilities from the running engine when it is registered; from the catalogue
+            // otherwise, so a switched-off engine can still say what it would offer.
+            clones = live?.SupportsVoiceCloning ?? known.Clones,
+            languages = live?.Languages ?? known.Languages,
+            speaksPolish = (live?.Languages ?? known.Languages)
+                .Any(language => language.StartsWith("pl", StringComparison.OrdinalIgnoreCase)),
+            state = live is not null ? "ready" : known.OffState,
+            note = live is not null ? "" : known.EnableHint,
+        };
+    })));
+
 // ---- the shelf: what you could add ---------------------------------------------------
 
 // Step one of "add a voice". canUpload says whether any installed engine can copy a recording
@@ -1126,6 +1150,37 @@ partial class Program
     /// Ids not registered in this build are skipped.
     /// </summary>
     internal static readonly string[] CloningEnginePreference = ["xtts-docker", "chatterbox-onnx"];
+
+    /// <param name="OffState">Why it is unavailable when unregistered: "disabled" or "licence".</param>
+    internal sealed record KnownEngine(
+        string Id, string Name, string Kind, string Licence, bool Clones,
+        IReadOnlyList<string> Languages, string OffState, string EnableHint);
+
+    /// <summary>
+    /// The catalogue behind GET /api/voices/engines. Deliberately lists engines that are switched
+    /// off too: the question "what could this machine do" was previously answerable only by
+    /// reading source, which made every engine addition invisible until someone wired a shelf
+    /// entry by hand.
+    /// </summary>
+    internal static readonly IReadOnlyList<KnownEngine> KnownEngines =
+    [
+        new("chatterbox-onnx", "Chatterbox", "builtin", "MIT", true,
+            ["en", "pl", "de", "fr", "es", "it"], "disabled", ""),
+        new("piper-onnx", "Piper / Coqui", "builtin", "MIT · CC0", false,
+            ["en", "pl"], "disabled", ""),
+        new("xtts-docker", "XTTS-v2", "container", "Non-commercial", true,
+            ["en", "pl", "de", "fr", "es", "it", "pt", "ru", "nl", "cs", "tr", "ar", "zh-cn", "ja", "hu", "ko", "hi"],
+            "licence",
+            "Non-commercial licence. Build its image, then set Xtts:AcceptCoquiLicense."),
+        new("moss-container", "MOSS-TTS", "container", "Apache 2.0", true,
+            ["pl", "en", "de", "es", "fr", "it", "ja", "ko", "ru", "zh", "pt", "cs", "da", "sv", "el", "tr", "ar", "fa", "hu"],
+            "disabled",
+            "Build its image with scripts/build-tts-images.ps1 moss, then set Moss:Enabled."),
+        new("qwen-container", "Qwen3-TTS (Polish)", "container", "Apache 2.0", true,
+            ["pl", "en", "de", "fr", "es", "it", "pt", "ru", "ja", "ko", "zh-cn"],
+            "disabled",
+            "Build its image with scripts/build-tts-images.ps1 qwen, then set Qwen:Enabled."),
+    ];
 
     /// <summary>Literal segments under /api/voices — a voice may not be named after one of them.</summary>
     internal static readonly HashSet<string> ReservedVoiceIds = new(StringComparer.OrdinalIgnoreCase)

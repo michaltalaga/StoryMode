@@ -429,6 +429,21 @@ export const pl: Strings = {
   languageNameEn: 'English',
   languageNamePl: 'Polski',
 
+  // --- Settings: the engine register ---
+  enginesHeading: 'Silniki mowy',
+  /** {ready} of {total} are switched on. */
+  enginesSummary: 'Na tej maszynie dostępne są {ready} z {total} silników.',
+  enginesShow: 'Pokaż silniki',
+  enginesHide: 'Ukryj silniki',
+  engineReady: 'dostępny',
+  engineOff: 'niewłączony',
+  engineLicence: 'wymaga decyzji o licencji',
+  engineClones: 'kopiuje głos z nagrania',
+  engineFixedVoices: 'stałe, wytrenowane głosy',
+  /** {count} is how many languages it speaks. */
+  engineLanguages: 'języków: {count}',
+  enginePolish: 'mówi po polsku',
+
   // --- Settings: voices ---
   settingsVoicesHeading: 'Głosy',
   settingsVoicesHint: 'Każdą opowieść czyta jeden z nich. Naciśnij odtwarzanie, żeby posłuchać.',
