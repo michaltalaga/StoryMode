@@ -103,6 +103,23 @@ def prepare(request: PrepareRequest):
     return {"voiceId": request.voiceId, "cached": str(target)}
 
 
+# Decoding steps per character of text, at three times what a real reading needs. Higgs emits
+# audio frames at 25 fps and a reading runs at roughly nine characters a second, so a faithful
+# reading costs about 2.8 steps per character.
+STEPS_PER_CHAR = float(os.environ.get("HIGGS_STEPS_PER_CHAR", "8.4"))
+MAX_STEPS = 2048
+
+
+def step_budget(text: str) -> int:
+    """The hard stop for one line.
+
+    The model's own default is a flat 2048 steps, and it does not always decide to stop: a
+    124-character line was seen to run past thirteen minutes toward that ceiling. Each step costs
+    real time here, so the ceiling has to scale with the text or one stuck line eats an hour.
+    """
+    return max(200, min(MAX_STEPS, round(len(text) * STEPS_PER_CHAR)))
+
+
 class SynthesizeRequest(BaseModel):
     voiceId: str
     text: str
@@ -131,9 +148,15 @@ def synthesize(request: SynthesizeRequest):
                 reference_text=voice.get("referenceText"),
                 temperature=request.temperature,
                 top_p=0.95,
+                max_new_tokens=step_budget(request.text),
             )
         out = wav.detach().cpu().to(torch.float32).reshape(-1).numpy()
         rate = int(model.config.sample_rate)
+        print(
+            f"[higgs] {len(request.text)} chars, capped at {step_budget(request.text)} steps, "
+            f"{len(out) / rate:.1f}s audio",
+            flush=True,
+        )
 
     buffer = io.BytesIO()
     soundfile.write(buffer, np.asarray(out, dtype="float32"), rate, format="WAV", subtype="FLOAT")
