@@ -48,9 +48,14 @@ public sealed record VoiceOffer(
 /// Pre-rendered sample shipped alongside the manifest. Its presence is what makes a shelf install
 /// fast — the installed voice's sample is a copy of this, not a fresh render.
 /// </param>
+/// <param name="Speaker">
+/// Fixed-voice engines: which built-in speaker this offer is. Nothing to download and nothing to
+/// learn — the voice already exists inside the model.
+/// </param>
 public sealed record VoiceInstallPlan(
     string EngineId,
     string? DownloadUrl = null,
     string? Bundle = null,
     string? ReferenceWavFile = null,
-    string? SampleFile = null);
+    string? SampleFile = null,
+    string? Speaker = null);

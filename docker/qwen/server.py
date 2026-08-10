@@ -1,11 +1,17 @@
 """HTTP front for Qwen3-TTS (Polish fine-tune), speaking the standard container contract.
 
-Like MOSS and unlike XTTS there is no separate conditioning step to cache — the reference audio
-goes in on every generation — so /prepare only records which recording belongs to a voice. Keeping
-the endpoint anyway is what lets the host treat every container engine identically.
+Two things about this model are not what its repository name suggests, both discovered by asking
+the installed package rather than reading the card:
 
-This engine clones markedly better when told what the reference recording *says*, so the transcript
-travels with it when one is available.
+  * It is a **CustomVoice** checkpoint, so it does not clone. `generate_voice_clone` raises, and
+    the speaker-encoder weights are discarded at load. It ships one trained speaker,
+    `polish_speaker`, and that is the whole voice list.
+  * The library's language whitelist has no Polish in it, despite the fine-tune being Polish.
+    `language="auto"` is the way in — the model is Polish-trained, the tag just cannot say so.
+
+So /prepare records which built-in speaker a voice uses and nothing else, and /synthesize calls
+generate_custom_voice. The endpoints stay the same shape as every other engine's, which is what
+lets the host treat them identically.
 """
 
 import base64
@@ -21,13 +27,7 @@ from pydantic import BaseModel
 
 MODEL_NAME = os.environ.get("QWEN_MODEL", "agnostic/Qwen3-TTS-Polish")
 VOICE_DIR = Path(os.environ.get("QWEN_VOICES", "/models/voices"))
-
-# Qwen names languages in full rather than by code.
-LANGUAGE_NAMES = {
-    "pl": "Polish", "en": "English", "de": "German", "fr": "French", "es": "Spanish",
-    "it": "Italian", "pt": "Portuguese", "ru": "Russian", "ja": "Japanese", "ko": "Korean",
-    "zh-cn": "Chinese", "zh": "Chinese",
-}
+DEFAULT_SPEAKER = os.environ.get("QWEN_SPEAKER", "polish_speaker")
 
 app = FastAPI()
 
@@ -63,6 +63,8 @@ def health():
         "ok": True,
         "device": _device,
         "model": MODEL_NAME,
+        "clones": False,
+        "speakers": [DEFAULT_SPEAKER],
         "modelLoaded": _model is not None,
         "cuda": torch.cuda.is_available(),
         "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
@@ -71,49 +73,49 @@ def health():
 
 class PrepareRequest(BaseModel):
     voiceId: str
-    referenceWav: str
+    speaker: str | None = None
+    referenceWav: str | None = None
     referenceText: str | None = None
 
 
 @app.post("/prepare")
 def prepare(request: PrepareRequest):
-    wav = Path(request.referenceWav)
-    if not wav.is_file():
-        raise HTTPException(status_code=404, detail=f"reference wav not found: {wav}")
-
+    """Records the built-in speaker for this voice. Any reference audio is ignored — saying so
+    here rather than silently dropping it is the difference between a limitation and a lie."""
     VOICE_DIR.mkdir(parents=True, exist_ok=True)
     target = voice_file(request.voiceId)
-    target.write_text(json.dumps({
-        "referenceWav": str(wav),
-        "referenceText": request.referenceText or "",
-    }), encoding="utf-8")
-    return {"voiceId": request.voiceId, "cached": str(target)}
+    target.write_text(json.dumps({"speaker": request.speaker or DEFAULT_SPEAKER}), encoding="utf-8")
+    return {"voiceId": request.voiceId, "speaker": request.speaker or DEFAULT_SPEAKER, "clones": False}
 
 
 class SynthesizeRequest(BaseModel):
     voiceId: str
     text: str
     language: str
+    speaker: str | None = None
     temperature: float = 0.65
     speed: float = 1.0
 
 
 @app.post("/synthesize")
 def synthesize(request: SynthesizeRequest):
-    cached = voice_file(request.voiceId)
-    if not cached.is_file():
-        raise HTTPException(status_code=409, detail=f"voice {request.voiceId!r} has not been prepared")
-    voice = json.loads(cached.read_text(encoding="utf-8"))
-
-    language = LANGUAGE_NAMES.get(request.language.lower(), request.language)
+    speaker = request.speaker
+    if not speaker:
+        cached = voice_file(request.voiceId)
+        speaker = (
+            json.loads(cached.read_text(encoding="utf-8")).get("speaker")
+            if cached.is_file()
+            else DEFAULT_SPEAKER
+        )
 
     with _lock:
         model = load()
-        wavs, sample_rate = model.generate_voice_clone(
+        # "auto" rather than the requested tag: the whitelist has no Polish even though this
+        # checkpoint is Polish-trained, and passing an unsupported tag raises.
+        wavs, sample_rate = model.generate_custom_voice(
             text=request.text,
-            language=language,
-            ref_audio=voice["referenceWav"],
-            ref_text=voice.get("referenceText") or "",
+            speaker=speaker,
+            language="auto",
         )
 
     import numpy as np

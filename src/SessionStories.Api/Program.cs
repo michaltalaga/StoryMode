@@ -113,11 +113,15 @@ if (options.Qwen.Enabled)
         Image: string.IsNullOrWhiteSpace(options.Qwen.Image) ? "storymode-qwen:latest" : options.Qwen.Image,
         ContainerName: string.IsNullOrWhiteSpace(options.Qwen.ContainerName) ? "storymode-qwen" : options.Qwen.ContainerName,
         Port: options.Qwen.Port == 0 ? 8022 : options.Qwen.Port,
-        // The base model does not speak Polish; this image runs a community fine-tune that does.
-        Languages: ["pl", "en", "de", "fr", "es", "it", "pt", "ru", "ja", "ko", "zh-cn"],
+        // Polish only in practice: the checkpoint is a Polish fine-tune, but the library's
+        // language whitelist has no Polish entry, so the image passes "auto" and the model does
+        // the rest. Claiming the base model's ten languages here would be claiming ten failures.
+        Languages: ["pl"],
         StylePresets: ContainerStylePresets.Default,
         LicenceNote: "Qwen3-TTS is Apache 2.0; build its image with scripts/build-tts-images.ps1 qwen.",
-        Accepted: true));
+        Accepted: true,
+        // A CustomVoice checkpoint: one built-in speaker, speaker encoder discarded at load.
+        Clones: false));
 }
 
 var ttsFactories = new Dictionary<string, Func<ITtsProvider>>
@@ -148,13 +152,15 @@ builder.Services.AddSingleton<IReadOnlyDictionary<string, IVoiceInstaller>>(serv
             () => new ChatterboxOnnxProvider(chatterboxOptions), http, gallery.WavsRoot),
         ["piper-onnx"] = new PiperVoiceInstaller("piper-onnx", piperOptions.ModelsRoot, http),
     };
-    // Nothing new needed per engine: they all clone from a recording, so the existing cloning
-    // installer serves every one of them unchanged. This is what the installer seam was for.
+    // A cloning engine learns a recording; a fixed-voice one already holds its voices. Picking
+    // the wrong installer would spend minutes preparing a reference the model then discards.
     foreach (var containerEngine in containerEngines)
     {
         var captured = containerEngine;
-        installers[captured.Id] = new CloningVoiceInstaller(captured.Id, store,
-            () => new ContainerTtsProvider(captured, containerMounts, containerHttp), http, gallery.WavsRoot);
+        installers[captured.Id] = captured.Clones
+            ? new CloningVoiceInstaller(captured.Id, store,
+                () => new ContainerTtsProvider(captured, containerMounts, containerHttp), http, gallery.WavsRoot)
+            : new FixedVoiceInstaller(captured.Id);
     }
     return installers;
 });
@@ -1176,8 +1182,8 @@ partial class Program
             ["pl", "en", "de", "es", "fr", "it", "ja", "ko", "ru", "zh", "pt", "cs", "da", "sv", "el", "tr", "ar", "fa", "hu"],
             "disabled",
             "Build its image with scripts/build-tts-images.ps1 moss, then set Moss:Enabled."),
-        new("qwen-container", "Qwen3-TTS (Polish)", "container", "Apache 2.0", true,
-            ["pl", "en", "de", "fr", "es", "it", "pt", "ru", "ja", "ko", "zh-cn"],
+        new("qwen-container", "Qwen3-TTS (Polish)", "container", "Apache 2.0", false,
+            ["pl"],
             "disabled",
             "Build its image with scripts/build-tts-images.ps1 qwen, then set Qwen:Enabled."),
     ];

@@ -12,6 +12,11 @@ namespace SessionStories.Tts.Container;
 /// worth having here so far ships under terms someone has to agree to, and agreeing is the
 /// operator's decision, not this code's.
 /// </param>
+/// <param name="Clones">
+/// False for engines whose voices are fixed and built in. Not every container engine clones —
+/// Qwen's Polish fine-tune ships one trained speaker and discards its speaker encoder entirely —
+/// and claiming otherwise would offer a reference recording that is silently ignored.
+/// </param>
 public sealed record ContainerTtsEngine(
     string Id,
     string Image,
@@ -20,7 +25,8 @@ public sealed record ContainerTtsEngine(
     IReadOnlyList<string> Languages,
     IReadOnlyList<TtsStylePreset> StylePresets,
     string LicenceNote,
-    bool Accepted)
+    bool Accepted,
+    bool Clones = true)
 {
     /// <summary>Extra `docker run -e` values, for images that need one (licence acknowledgements).</summary>
     public IReadOnlyDictionary<string, string> Environment { get; init; } =

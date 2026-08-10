@@ -18,6 +18,19 @@ so the cost of trying one is an afternoon, and the real bottleneck is listening,
 | `chatterbox-onnx` | MIT | poor — drifts, slides toward Czech | yes | in-process, CUDA |
 | `piper-onnx` | MIT / CC0 per voice | correct pronunciation, flat delivery | no | in-process, CPU |
 | `xtts-docker` | CPML — **non-commercial** | yes, native | yes | container, CUDA |
+| `qwen-container` | **Apache 2.0** | yes, and only Polish | **no** | container, CUDA |
+
+`qwen-container` runs `agnostic/Qwen3-TTS-Polish`. Three things about it are not what the
+repository name suggests, all found by asking the installed package rather than reading the card:
+
+- It is a **CustomVoice** checkpoint, so it **does not clone**. `generate_voice_clone` raises, and
+  the speaker-encoder weights are discarded at load. It ships exactly one voice, `polish_speaker`.
+- The library's language whitelist contains no Polish — `['auto', 'chinese', 'english', 'french',
+  'german', 'italian', 'japanese', 'korean', 'portuguese', 'russian', 'spanish']` — even though the
+  checkpoint is Polish-trained. `language="auto"` is the way in.
+- It is **slow**: 32 s of audio took 216 s, about 0.15× realtime, against XTTS's 3.2×. A
+  twenty-minute story would take over two hours. flash-attn is not installed in the image, which
+  may account for some of it.
 
 Piper also serves coqui VITS bundles: they ship no `espeak-ng-data` and are character-based
 rather than phoneme-based, which the provider used to reject outright.
@@ -31,7 +44,6 @@ Measured on an RTX 4060 Ti, cross-lingual (English reference reading Polish): XT
 
 | Engine | Licence | Polish | Clones | Size | Why |
 |---|---|---|---|---|---|
-| **Qwen3-TTS Polish** | **Apache 2.0** | `agnostic/Qwen3-TTS-Polish` — a fine-tune that *adds* Polish | yes | **1.7B** | Smallest of the serious candidates, installs from PyPI (`qwen-tts`) rather than source, and the only one with a **C#/ONNX export** (`elbruno/ElBruno.QwenTTS`) — so if it wins it could eventually drop the container entirely. Revisions `-r9`, `-r10` exist |
 | **MOSS-TTS** | **Apache 2.0** | yes, 20 langs, explicit language tag | yes | 4B local / 8B delay | The only permissive licence that also clones. `MOSS-TTS-Nano` (~100M) runs on 4 CPU cores |
 | **Higgs TTS 3** | research / non-commercial | yes, 100+ langs, WER/CER < 5 | yes | 4B | Best *claimed* Polish of any of them. Served via SGLang-Omni, OpenAI-shaped `/v1/audio/speech` |
 | **VoxPolska-Auralis** | **Apache 2.0** | Polish-*only* fine-tune | **no** | 1B (Llama-3.2 + xcodec2) | A whole model spent on one language. Fixed voice like piper, but LLM-based — may well beat it. Outputs 16 kHz, which is low |

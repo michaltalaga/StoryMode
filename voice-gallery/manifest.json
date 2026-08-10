@@ -90,6 +90,20 @@
       }
     },
     {
+      "key": "qwen/pl-speaker",
+      "name": "Qwen Polish",
+      "description": "A Polish-only model with one built-in voice — no recording to copy. Currently the slowest engine here by a wide margin; judge it on the sample before committing a whole story to it.",
+      "locale": "pl-PL",
+      "downloadBytes": 0,
+      "license": "Apache-2.0",
+      "attribution": "agnostic/Qwen3-TTS-Polish, a Polish fine-tune of Qwen3-TTS (Apache 2.0)",
+      "sample": "qwen-pl-speaker.mp3",
+      "install": {
+        "engine": "qwen-container",
+        "speaker": "polish_speaker"
+      }
+    },
+    {
       "key": "piper/pl_PL-bass",
       "name": "Bass",
       "description": "Polish, male. The only high-quality-tier Polish voice available — try this one first.",

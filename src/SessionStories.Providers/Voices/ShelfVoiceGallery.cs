@@ -82,7 +82,8 @@ public sealed class ShelfVoiceGallery(string galleryRoot) : IVoiceGallery
                     DownloadUrl: GetString(install, "downloadUrl"),
                     Bundle: GetString(install, "bundle"),
                     ReferenceWavFile: GetString(install, "referenceWavFile"),
-                    SampleFile: GetString(entry, "sample"))));
+                    SampleFile: GetString(entry, "sample"),
+                    Speaker: GetString(install, "speaker"))));
         }
         return offers;
     }

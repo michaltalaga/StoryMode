@@ -36,13 +36,18 @@ public sealed class ContainerTtsProvider(
         ],
         OutputSampleRate: 44100,
         AppliesWatermark: false,
-        SupportsVoiceCloning: true,
+        SupportsVoiceCloning: engine.Clones,
         StylePresets: engine.StylePresets);
 
     private string BaseUrl => $"http://127.0.0.1:{engine.Port}";
 
     public async Task PrepareVoiceAsync(string referenceWavPath, string voiceId, CancellationToken ct = default)
     {
+        // A fixed-voice engine has nothing to learn from a recording, and pretending otherwise
+        // would make an install look like it did something it did not.
+        if (!engine.Clones)
+            return;
+
         await EnsureRunningAsync(ct);
 
         // The container sees the voices folder at /voices; hand it a path it can open.
@@ -85,6 +90,9 @@ public sealed class ContainerTtsProvider(
                 language,
                 temperature = Knob(request, "temperature", 0.65),
                 speed = Knob(request, "speed", 1.0),
+                // Fixed-voice engines pick a built-in speaker instead of cloning one; which
+                // speaker is the voice's own engine-private business.
+                speaker = request.EngineData?.GetValueOrDefault("speaker"),
             }, ct);
             await ThrowIfFailedAsync(response, $"rendering chunk {i + 1}", ct);
 
