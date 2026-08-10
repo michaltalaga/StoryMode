@@ -163,8 +163,27 @@ public sealed class ContainerTtsProvider(
         }
     }
 
+    /// <summary>
+    /// Stops every other engine container before starting this one. Same rule the in-process
+    /// engines follow — whisper and chatterbox may never share VRAM — extended to containers,
+    /// because several multi-billion-parameter models resident at once will not fit on one card.
+    /// Jobs run serially, so exactly one engine is ever needed.
+    /// </summary>
+    private void StopOtherEngines()
+    {
+        var running = DockerCaptured("ps", "--filter", "name=storymode-", "--format", "{{.Names}}")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var name in running)
+        {
+            if (!string.Equals(name, engine.ContainerName, StringComparison.Ordinal))
+                Docker("stop", name);
+        }
+    }
+
     private void StartContainer()
     {
+        StopOtherEngines();
+
         // An existing-but-stopped container starts far faster than creating one, and keeps what it
         // cached. Failure is fine: `run` below creates it.
         Docker("start", engine.ContainerName);

@@ -27,19 +27,26 @@ Measured on an RTX 4060 Ti, cross-lingual (English reference reading Polish): XT
 
 ## Candidates, not yet tried
 
-| Engine | Licence | Polish | Size | Why it is interesting |
-|---|---|---|---|---|
-| **MOSS-TTS** | **Apache 2.0** | yes, 20 langs | 4B (Qwen3 backbone) | The only permissive licence of the lot. v1.5, June 2026. `MOSS-TTS-Nano` is small enough for CPU |
-| **Higgs TTS 3** | research / non-commercial | yes, 100+ langs, WER/CER < 5 | 4B | Best claimed Polish. Served via SGLang-Omni, so a heavier image |
-| **VibeVoice** | Microsoft | community packs (`Sticzu/vibevoice-polish-voices`) | 1.5B / 0.5B realtime | Built for **long-form** — ~90 min single pass. Aimed at the drift problem rather than the language problem. Polish is "provided to explore", not benchmarked |
-| **LLaSA Polish** | per fine-tune | `salihfurkaan/VoxPolska-Auralis` is Polish-only | 1B | A dedicated fine-tune usually beats a multilingual model that merely lists the language |
-| **VoxCPM2** | check | yes, of 30 langs | small | Tokeniser-free, April 2026 |
-| **Qwen3-TTS** | check | unverified | — | Requested; not yet researched |
+### Worth building
 
-Ruled out, with the reason:
+| Engine | Licence | Polish | Clones | Size | Why |
+|---|---|---|---|---|---|
+| **MOSS-TTS** | **Apache 2.0** | yes, 20 langs, explicit language tag | yes | 4B local / 8B delay | The only permissive licence that also clones. `MOSS-TTS-Nano` (~100M) runs on 4 CPU cores |
+| **Higgs TTS 3** | research / non-commercial | yes, 100+ langs, WER/CER < 5 | yes | 4B | Best *claimed* Polish of any of them. Served via SGLang-Omni, OpenAI-shaped `/v1/audio/speech` |
+| **VoxPolska-Auralis** | **Apache 2.0** | Polish-*only* fine-tune | **no** | 1B (Llama-3.2 + xcodec2) | A whole model spent on one language. Fixed voice like piper, but LLM-based — may well beat it. Outputs 16 kHz, which is low |
+| **VoxCPM2** | check | yes, of 30 langs | yes | small | Tokeniser-free, April 2026. Not yet researched in detail |
 
-- **Kokoro** — clearly better than Piper, already packaged in sherpa-onnx, but **no Polish**
-  (8 languages, and Polish is not among them).
+### Ruled out, with the reason
+
+- **Qwen3-TTS** — clones well and there is even a **C#/.NET ONNX export** (`elbruno/ElBruno.QwenTTS`)
+  which would run in-process with no container at all. But its ten languages are zh, en, ja, ko,
+  de, fr, ru, pt, es, it — **no Polish**. Worth remembering if English ever needs a lighter engine.
+- **VibeVoice** — Microsoft **withdrew the TTS code** from the repository after finding it misused;
+  only ASR and `VibeVoice-Realtime-0.5B` remain. The `Sticzu/vibevoice-polish-voices` packs target
+  a model whose official inference code is gone. Its long-form design (~90 min single pass) was the
+  genuinely interesting property, so revisit if the Realtime model proves capable in Polish.
+- **Kokoro** — clearly better than Piper and already packaged in sherpa-onnx, but **no Polish**
+  (8 languages, Polish not among them).
 - **F5-TTS, Zonos** — actively developed, but Polish needs fine-tuning rather than being native.
   A community `Gregniuki/F5-tts_English_German_Polish` exists if that changes.
 - **ZipVoice** — zero-shot cloning, already in sherpa-onnx as ONNX, but zh/en only.
