@@ -40,6 +40,16 @@ public sealed record ContainerTtsEngine(
 
     /// <summary>How long to wait for the container to answer /health. Big models load slowly.</summary>
     public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// How much text goes into one generation. The defaults suit engines that lose the thread over
+    /// a long passage, which is most of them. VibeVoice is the opposite case — it is built to hold
+    /// ninety minutes in a single pass — and feeding it a sentence at a time would throw away the
+    /// one thing it does better than everything else here.
+    /// </summary>
+    public int MinChunkCharacters { get; init; } = 150;
+
+    public int MaxChunkCharacters { get; init; } = 350;
 }
 
 /// <summary>The library directories every container sees, whichever engine it runs.</summary>

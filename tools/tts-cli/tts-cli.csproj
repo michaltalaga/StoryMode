@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SessionStories.Tts.Chatterbox\SessionStories.Tts.Chatterbox.csproj" />
     <ProjectReference Include="..\..\src\SessionStories.Tts.Piper\SessionStories.Tts.Piper.csproj" />
+    <ProjectReference Include="..\..\src\SessionStories.Tts.Container\SessionStories.Tts.Container.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

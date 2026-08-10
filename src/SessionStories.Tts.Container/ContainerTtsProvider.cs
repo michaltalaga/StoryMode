@@ -71,7 +71,8 @@ public sealed class ContainerTtsProvider(
 
         await EnsureRunningAsync(ct);
 
-        var chunks = SentenceChunker.Chunk(request.Text);
+        var chunks = SentenceChunker.Chunk(
+            request.Text, engine.MinChunkCharacters, engine.MaxChunkCharacters);
         if (chunks.Count == 0)
             throw new InvalidOperationException("No text to synthesize.");
 

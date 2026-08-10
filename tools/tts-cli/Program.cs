@@ -14,6 +14,7 @@ try
         "prepare-voice" => PrepareVoice(args[1..]),
         "synth" => Synth(args[1..]),
         "synth-piper" => SynthPiper(args[1..]),
+        "synth-container" => SynthContainer(args[1..]),
         "parity" => Parity(args[1..]),
         _ => Usage($"unknown verb '{args[0]}'"),
     };
@@ -120,6 +121,66 @@ static int SynthPiper(string[] rest)
 
     provider.SynthesizeAsync(request, new ConsoleProgress()).GetAwaiter().GetResult();
     Console.WriteLine($"wrote {outPath}");
+    return 0;
+}
+
+/// <summary>
+/// Renders through one of the container engines. Same panel-bypass promise as `synth`, and how
+/// their gallery samples get made — the container is already running, so this only needs to know
+/// which port to talk to. Deliberately takes the engine's shape as flags rather than importing the
+/// API's registrations: those belong to the app, and duplicating them here would let the two drift.
+/// </summary>
+static int SynthContainer(string[] rest)
+{
+    var flags = ParseFlags(rest, ["no-clone"]);
+    var textFile = Require(flags, "text-file");
+    var name = Require(flags, "engine");
+    var lang = Require(flags, "lang");
+    var voice = Require(flags, "voice");
+    var outPath = Require(flags, "out");
+    var port = ParseInt(Require(flags, "port"), "port");
+
+    if (!File.Exists(textFile))
+        throw new UsageException($"text file not found: {textFile}");
+
+    var repoRoot = FindRepoRoot();
+    var knobs = new Dictionary<string, double>();
+    AddKnob(flags, knobs, "temperature");
+    AddKnob(flags, knobs, "speed");
+
+    var engine = new SessionStories.Tts.Container.ContainerTtsEngine(
+        Id: name,
+        Image: $"storymode-{name}:latest",
+        ContainerName: flags.GetValueOrDefault("container") ?? $"storymode-{name}",
+        Port: port,
+        ModelsRoot: flags.GetValueOrDefault("models-root") ?? Path.Combine(repoRoot, "models", name),
+        Languages: [lang],
+        StylePresets: SessionStories.Tts.Container.ContainerStylePresets.Default,
+        LicenceNote: "",
+        Accepted: true,
+        Clones: !flags.ContainsKey("no-clone"));
+    var mounts = new SessionStories.Tts.Container.ContainerTtsMounts(
+        VoicesRoot: flags.GetValueOrDefault("voices-root") ?? Path.Combine(repoRoot, "library", "voices"));
+
+    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
+    var provider = new SessionStories.Tts.Container.ContainerTtsProvider(engine, mounts, http);
+
+    // A cloning engine has to be taught the voice before it can read in it. --reference-wav names
+    // a file under the voices root; without it the voice is assumed to be prepared already.
+    if (flags.TryGetValue("reference-wav", out var referenceWav))
+        provider.PrepareVoiceAsync(referenceWav, voice).GetAwaiter().GetResult();
+
+    EnsureParentDir(outPath);
+    var request = new TtsRequest(
+        File.ReadAllText(textFile), lang, voice, outPath,
+        knobs.Count > 0 ? knobs : null,
+        EngineData: flags.TryGetValue("speaker", out var speaker)
+            ? new Dictionary<string, string> { ["speaker"] = speaker }
+            : null);
+
+    var started = DateTimeOffset.UtcNow;
+    provider.SynthesizeAsync(request, new ConsoleProgress()).GetAwaiter().GetResult();
+    Console.WriteLine($"wrote {outPath} in {(DateTimeOffset.UtcNow - started).TotalSeconds:0.0}s");
     return 0;
 }
 
@@ -290,6 +351,11 @@ static int Usage(string? error)
 
           tts-cli synth-piper --text-file <path> --bundle <bundleFolder> --lang <code> --out <mp3>
                         [--speed <0.5..2>] [--models-root <dir>]
+
+          tts-cli synth-container --text-file <path> --engine <name> --port <n> --voice <voiceId>
+                        --lang <code> --out <mp3> [--reference-wav <path>] [--speaker <name>]
+                        [--no-clone] [--temperature <0.1..1.5>] [--speed <0.5..2>]
+                        [--container <name>] [--models-root <dir>] [--voices-root <dir>]
 
           tts-cli parity (--text <string> | --text-file <path>) --lang <code> --dump-tokens <path.json>
                         [--voice <wav>] [--cpu] [--wav-out <path>] [--exaggeration <v>]

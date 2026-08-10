@@ -171,7 +171,13 @@ if (options.VibeVoice.Enabled)
         Languages: ["en", "zh-cn"],
         StylePresets: ContainerStylePresets.Default,
         LicenceNote: "VibeVoice is MIT; build its image with scripts/build-tts-images.ps1 vibevoice.",
-        Accepted: true));
+        Accepted: true)
+    {
+        // Paragraphs rather than sentences: this model holds up over long passages, and every
+        // chunk boundary is a place where the reading can restart on a different footing.
+        MinChunkCharacters = 600,
+        MaxChunkCharacters = 1600,
+    });
     containerEngines.Add(new ContainerTtsEngine(
         Id: "vibevoice-pl-container",
         Image: options.VibeVoice.Image,
@@ -1250,6 +1256,20 @@ partial class Program
             ["pl"],
             "disabled",
             "Build its image with scripts/build-tts-images.ps1 qwen, then set Qwen:Enabled."),
+        new("higgs-container", "Higgs TTS 3", "container", "Non-commercial", true,
+            ["en", "pl", "de", "fr", "es", "it", "pt", "nl", "sv", "da", "fi", "cs", "sk", "uk",
+             "ru", "hu", "ro", "bg", "hr", "el", "tr", "zh-cn", "ja", "ko"],
+            "licence",
+            "Research and non-commercial licence, free for credited creator use. Build its image " +
+            "with scripts/build-tts-images.ps1 higgs, then set Higgs:Enabled and Higgs:AcceptLicense."),
+        new("vibevoice-container", "VibeVoice", "container", "MIT", true,
+            ["en", "zh-cn"],
+            "disabled",
+            "Build its image with scripts/build-tts-images.ps1 vibevoice, then set VibeVoice:Enabled."),
+        new("vibevoice-pl-container", "VibeVoice (Polish)", "container", "MIT", false,
+            ["pl"],
+            "disabled",
+            "Same image as VibeVoice — building it and setting VibeVoice:Enabled turns on both."),
     ];
 
     /// <summary>Literal segments under /api/voices — a voice may not be named after one of them.</summary>
