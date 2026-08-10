@@ -120,7 +120,23 @@ GPU residency: model sessions are lazy-loaded per job and disposed at job end �
 and Chatterbox (~2.5–3 GB) must never coexist in VRAM.
 
 **TTS engines**: `renderTts`, `previewVoice` and `installVoice` support multiple engines, selected
-per voice from the `engine` field in `library/voices.json` (`chatterbox-onnx` when absent). Each
+per voice from the `engine` field in `library/voices.json` (`chatterbox-onnx` when absent).
+
+`xtts-docker` is the third: XTTS-v2 in a container, spoken to over HTTP on `127.0.0.1:8020`. It
+clones from a recording like chatterbox but is trained across seventeen languages including Polish,
+which is the one chatterbox is thin on. It exists as a container because XTTS has no ONNX export
+worth trusting and the alternative was another hand port — the Python lives inside the image and
+the host never sees it. Chunking, stitching and mp3 encoding are shared with the other engines, so
+the audio is finished identically whichever produced it. `scripts/build-xtts-image.ps1` builds the
+image; the weights (~2 GB) download on first render into `models/xtts`, a volume; the provider
+starts the container on demand and leaves it running, because loading the model costs ~30 s and
+paying that per chunk would dwarf the render.
+
+**It is registered only when `SessionStories:Xtts:AcceptCoquiLicense` is true.** XTTS-v2 is
+published under the Coqui Public Model License (non-commercial), and an engine that cannot legally
+load is worse than an absent one — it would appear as an option and then fail at render time.
+When several engines can clone a language, `Program.CloningEnginePreference` decides, explicitly
+rather than by dictionary order. Each
 voice carries its engine's private settings in `engineData`, passed through to the provider as
 `TtsRequest.EngineData`: `chatterbox-onnx` reads `referenceWav` (it clones), `piper-onnx` reads
 `bundle` (Piper VITS via sherpa-onnx, CPU — fixed trained voices, no cloning, single `speed` knob,

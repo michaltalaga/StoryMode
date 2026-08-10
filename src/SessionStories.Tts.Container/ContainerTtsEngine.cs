@@ -1,0 +1,47 @@
+using SessionStories.Core.Tts;
+
+namespace SessionStories.Tts.Container;
+
+/// <summary>
+/// A speech engine that runs in a container and answers three endpoints: <c>/health</c>,
+/// <c>/prepare</c> and <c>/synthesize</c>. One contract, many images — which is what lets a model
+/// with no usable ONNX export join the app without another hand-written port.
+/// </summary>
+/// <param name="LicenceNote">
+/// Shown instead of starting the container when <paramref name="Accepted"/> is false. Every model
+/// worth having here so far ships under terms someone has to agree to, and agreeing is the
+/// operator's decision, not this code's.
+/// </param>
+public sealed record ContainerTtsEngine(
+    string Id,
+    string Image,
+    string ContainerName,
+    int Port,
+    IReadOnlyList<string> Languages,
+    IReadOnlyList<TtsStylePreset> StylePresets,
+    string LicenceNote,
+    bool Accepted)
+{
+    /// <summary>Extra `docker run -e` values, for images that need one (licence acknowledgements).</summary>
+    public IReadOnlyDictionary<string, string> Environment { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>How long to wait for the container to answer /health. Big models load slowly.</summary>
+    public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromMinutes(10);
+}
+
+/// <summary>Host directories the container needs; both are mounted at fixed paths inside it.</summary>
+/// <param name="ModelsRoot">Weights land here (a volume), so rebuilding an image re-downloads nothing.</param>
+/// <param name="VoicesRoot">Reference recordings, mounted read-only — a container never writes to the library.</param>
+public sealed record ContainerTtsMounts(string ModelsRoot, string VoicesRoot);
+
+/// <summary>The delivery presets every container engine offers, over knobs they all understand.</summary>
+public static class ContainerStylePresets
+{
+    public static readonly IReadOnlyList<TtsStylePreset> Default =
+    [
+        new(VoiceStyle.Calm, new Dictionary<string, double> { ["temperature"] = 0.5, ["speed"] = 0.95 }),
+        new(VoiceStyle.Natural, new Dictionary<string, double> { ["temperature"] = 0.65, ["speed"] = 1.0 }),
+        new(VoiceStyle.Lively, new Dictionary<string, double> { ["temperature"] = 0.85, ["speed"] = 1.05 }),
+    ];
+}

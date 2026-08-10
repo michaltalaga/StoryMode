@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SessionStories.Core\SessionStories.Core.csproj" />
+    <!-- SentenceChunker + AudioPostProcessor: every engine gets the same chunking, stitching
+         and mp3 encoding, so switching engines cannot change how the audio is finished. -->
+    <ProjectReference Include="..\SessionStories.Tts.Chatterbox\SessionStories.Tts.Chatterbox.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

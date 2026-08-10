@@ -16,6 +16,7 @@ public sealed class SessionStoriesOptions
     public WhisperOptions Whisper { get; set; } = new();
     public TtsOptions Tts { get; set; } = new();
     public PiperOptions Piper { get; set; } = new();
+    public XttsOptions Xtts { get; set; } = new();
     public ClaudeOptions Claude { get; set; } = new();
     public JobsOptions Jobs { get; set; } = new();
 
@@ -33,6 +34,20 @@ public sealed class SessionStoriesOptions
     public sealed class PiperOptions
     {
         public string ModelsRoot { get; set; } = "";
+    }
+
+    public sealed class XttsOptions
+    {
+        public string ModelsRoot { get; set; } = "";
+        public string Image { get; set; } = "storymode-xtts:latest";
+        public string ContainerName { get; set; } = "storymode-xtts";
+        public int Port { get; set; } = 8020;
+
+        /// <summary>
+        /// XTTS-v2 is under the Coqui Public Model License — non-commercial only. Accepting it is
+        /// the operator's call, so the engine stays unavailable until this is switched on by hand.
+        /// </summary>
+        public bool AcceptCoquiLicense { get; set; }
     }
 
     public sealed class ClaudeOptions
@@ -73,6 +88,7 @@ public sealed class SessionStoriesOptions
         Tts.ModelDir = ResolvePath(Tts.ModelDir, Path.Combine(RepoRoot, "models", "chatterbox"));
         Tts.VoiceCacheDir = ResolvePath(Tts.VoiceCacheDir, Path.Combine(LibraryRoot, "voice-cache"));
         Piper.ModelsRoot = ResolvePath(Piper.ModelsRoot, Path.Combine(RepoRoot, "models", "piper"));
+        Xtts.ModelsRoot = ResolvePath(Xtts.ModelsRoot, Path.Combine(RepoRoot, "models", "xtts"));
         GalleryRoot = ResolvePath(GalleryRoot, Path.Combine(RepoRoot, "voice-gallery"));
 
         foreach (var (type, minutes) in DefaultTimeouts)

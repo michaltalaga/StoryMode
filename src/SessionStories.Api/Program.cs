@@ -16,6 +16,7 @@ using SessionStories.Providers.Voices;
 using SessionStories.Providers.Whisper;
 using SessionStories.Tts.Chatterbox;
 using SessionStories.Tts.Piper;
+using SessionStories.Tts.Container;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -60,12 +61,48 @@ var piperOptions = new PiperOptions
 {
     ModelsRoot = options.Piper.ModelsRoot,
 };
-builder.Services.AddSingleton<IReadOnlyDictionary<string, Func<ITtsProvider>>>(_ =>
-    new Dictionary<string, Func<ITtsProvider>>
+// The container engines. These exist because the best multilingual models have no ONNX export
+// worth trusting, and hand-porting each one is weeks of work — the host talks HTTP and never
+// sees the Python inside. Each is registered only when its image is built and its licence
+// accepted: an engine that cannot load is worse than an absent one, because it would appear as
+// an option and then fail at render time.
+var containerMounts = new ContainerTtsMounts(
+    ModelsRoot: options.Xtts.ModelsRoot,
+    VoicesRoot: Path.Combine(options.LibraryRoot, "voices"));
+// Long timeout: a chunk is seconds, but the first call also waits for the model to load.
+var containerHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(15) };
+
+var containerEngines = new List<ContainerTtsEngine>();
+if (options.Xtts.AcceptCoquiLicense)
+{
+    containerEngines.Add(new ContainerTtsEngine(
+        Id: "xtts-docker",
+        Image: options.Xtts.Image,
+        ContainerName: options.Xtts.ContainerName,
+        Port: options.Xtts.Port,
+        Languages: ["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "ja", "hu", "ko", "hi"],
+        StylePresets: ContainerStylePresets.Default,
+        LicenceNote:
+            "XTTS-v2 is published under the Coqui Public Model License (non-commercial use only) " +
+            "and will not load until that is accepted. Set SessionStories:Xtts:AcceptCoquiLicense " +
+            "to true in appsettings.json if those terms are acceptable to you.",
+        Accepted: true)
     {
-        ["chatterbox-onnx"] = () => new ChatterboxOnnxProvider(chatterboxOptions),
-        ["piper-onnx"] = () => new PiperOnnxProvider(piperOptions),
+        Environment = new Dictionary<string, string> { ["COQUI_TOS_AGREED"] = "1" },
     });
+}
+
+var ttsFactories = new Dictionary<string, Func<ITtsProvider>>
+{
+    ["chatterbox-onnx"] = () => new ChatterboxOnnxProvider(chatterboxOptions),
+    ["piper-onnx"] = () => new PiperOnnxProvider(piperOptions),
+};
+foreach (var containerEngine in containerEngines)
+{
+    var captured = containerEngine;
+    ttsFactories[captured.Id] = () => new ContainerTtsProvider(captured, containerMounts, containerHttp);
+}
+builder.Services.AddSingleton<IReadOnlyDictionary<string, Func<ITtsProvider>>>(_ => ttsFactories);
 
 // The shelf of installable voices, and the per-engine plumbing that turns a shelf entry (or a
 // reader's own recording) into one. Adding an engine means registering an installer here — no
@@ -77,21 +114,32 @@ builder.Services.AddSingleton<IReadOnlyDictionary<string, IVoiceInstaller>>(serv
     var gallery = (ShelfVoiceGallery)services.GetRequiredService<IVoiceGallery>();
     var store = services.GetRequiredService<IVoiceStore>();
     var http = services.GetRequiredService<HttpClient>();
-    return new Dictionary<string, IVoiceInstaller>
+    var installers = new Dictionary<string, IVoiceInstaller>
     {
         ["chatterbox-onnx"] = new CloningVoiceInstaller("chatterbox-onnx", store,
             () => new ChatterboxOnnxProvider(chatterboxOptions), http, gallery.WavsRoot),
         ["piper-onnx"] = new PiperVoiceInstaller("piper-onnx", piperOptions.ModelsRoot, http),
     };
+    // Nothing new needed per engine: they all clone from a recording, so the existing cloning
+    // installer serves every one of them unchanged. This is what the installer seam was for.
+    foreach (var containerEngine in containerEngines)
+    {
+        var captured = containerEngine;
+        installers[captured.Id] = new CloningVoiceInstaller(captured.Id, store,
+            () => new ContainerTtsProvider(captured, containerMounts, containerHttp), http, gallery.WavsRoot);
+    }
+    return installers;
 });
 // Capability metadata, keyed the same way but resolved from statics: a read-only endpoint such
 // as GET /api/voices must never construct a provider (that path ends in ONNX sessions in VRAM).
-builder.Services.AddSingleton<IReadOnlyDictionary<string, TtsCapabilities>>(_ =>
-    new Dictionary<string, TtsCapabilities>
-    {
-        ["chatterbox-onnx"] = ChatterboxOnnxProvider.DescribeCapabilities(chatterboxOptions),
-        ["piper-onnx"] = PiperOnnxProvider.DescribeCapabilities(piperOptions),
-    });
+var ttsCapabilities = new Dictionary<string, TtsCapabilities>
+{
+    ["chatterbox-onnx"] = ChatterboxOnnxProvider.DescribeCapabilities(chatterboxOptions),
+    ["piper-onnx"] = PiperOnnxProvider.DescribeCapabilities(piperOptions),
+};
+foreach (var containerEngine in containerEngines)
+    ttsCapabilities[containerEngine.Id] = ContainerTtsProvider.Describe(containerEngine);
+builder.Services.AddSingleton<IReadOnlyDictionary<string, TtsCapabilities>>(_ => ttsCapabilities);
 
 builder.Services.AddSingleton<JobRegistry>();
 builder.Services.AddHostedService<JobRunnerService>();
@@ -325,13 +373,14 @@ api.MapPost("/voices/from-recording", async (HttpRequest http, IVoiceStore voice
     var locale = VoiceLocale.Normalize(form["locale"].ToString());
     var language = VoiceLocale.LanguageOf(locale);
 
-    // Which engine can actually copy a voice in this language decides the install; the reader
-    // never picks one.
-    var engineId = ttsCapabilities
-        .Where(pair => pair.Value.SupportsVoiceCloning &&
-                       pair.Value.Languages.Contains(language, StringComparer.OrdinalIgnoreCase))
-        .Select(pair => pair.Key)
-        .FirstOrDefault();
+    // Which engine can copy a voice in this language decides the install; the reader never picks
+    // one. Preference is explicit rather than whichever the dictionary happens to yield first —
+    // XTTS is trained properly on seventeen languages, chatterbox on English with the rest thin.
+    var engineId = Program.CloningEnginePreference
+        .Concat(ttsCapabilities.Keys)
+        .Distinct(StringComparer.Ordinal)
+        .FirstOrDefault(id => ttsCapabilities.GetValueOrDefault(id) is { SupportsVoiceCloning: true } capability &&
+                              capability.Languages.Contains(language, StringComparer.OrdinalIgnoreCase));
     if (engineId is null)
         return Problem(400, $"No installed engine can copy a voice in {locale}");
 
@@ -1041,6 +1090,14 @@ partial class Program
     {
         ".m4a", ".mp3", ".wav", ".ogg", ".opus", ".webm", ".aac", ".flac", ".wma",
     };
+
+    /// <summary>
+    /// Which cloning engine gets a new recording, best first. Explicit because "whichever the
+    /// dictionary yields" is not a decision — XTTS is trained across seventeen languages,
+    /// chatterbox is excellent in English and thin elsewhere, which is exactly the Polish problem.
+    /// Ids not registered in this build are skipped.
+    /// </summary>
+    internal static readonly string[] CloningEnginePreference = ["xtts-docker", "chatterbox-onnx"];
 
     /// <summary>Literal segments under /api/voices — a voice may not be named after one of them.</summary>
     internal static readonly HashSet<string> ReservedVoiceIds = new(StringComparer.OrdinalIgnoreCase)

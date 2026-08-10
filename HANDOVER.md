@@ -325,6 +325,14 @@ contract) invalidated a few details:
   render time, so two engines with unrelated knobs (`exaggeration`+`cfg` vs `speed`)
   share one control and the numbers stay backstage. A voice's sample is always the
   neutral delivery, which is why it cannot go stale.
+- **"No Python" meant "not on the host", not "never".** The rule was read too strictly
+  for months: it turned every candidate engine into an ONNX-port question, and the
+  only modern model we had was the one hand-ported at great cost. The escape hatch was
+  granted at the time — *"if necessary we can either find an mcp or a docker that can
+  be used instead"* — and a container satisfies it exactly. `xtts-docker` runs XTTS-v2
+  that way: seventeen properly-trained languages including Polish, no Python on the
+  host, one more `ITtsProvider`. Its licence (Coqui Public Model License,
+  non-commercial) keeps it unregistered until accepted by hand.
 - **Recording a voice needs https, so the app serves both.** Browsers hide the
   microphone on an insecure origin, which made "record grandma reading" impossible
   over the plain-http LAN address. Kestrel now also listens on `:5212` with the

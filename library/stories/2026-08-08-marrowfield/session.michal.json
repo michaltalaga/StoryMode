@@ -37,7 +37,7 @@
     {
       "id": "b2",
       "flag": "given",
-      "text": "First two traps in the caves found and survived; the third catches Corin — the wall gives way and he falls."
+      "text": "First two traps in the caves found and survived; the third catches Corin \u2014 the wall gives way and he falls."
     },
     {
       "id": "b3",
@@ -47,7 +47,7 @@
     {
       "id": "b4",
       "flag": "given",
-      "text": "Goblin fight at the underground lake — Corin distracts the chief; the party wins."
+      "text": "Goblin fight at the underground lake \u2014 Corin distracts the chief; the party wins."
     },
     {
       "id": "b5",
@@ -60,5 +60,5 @@
     "initiative rules argument",
     "sandwich break"
   ],
-  "delivery": "natural"
+  "delivery": "lively"
 }
