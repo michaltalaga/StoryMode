@@ -108,13 +108,23 @@ def polish_voice(speaker: str):
 
 
 def _to_device(obj):
-    """Walks whatever the cached prompt turns out to be, moving tensors to the GPU as it goes."""
+    """Walks whatever the cached prompt turns out to be, moving tensors to the GPU as it goes.
+
+    Mappings and lists are updated in place rather than rebuilt, and that is the whole trick: a
+    cached prompt holds transformers ModelOutput objects, ModelOutput is a dict subclass, and
+    rebuilding one as `{...}` quietly turns it into a plain dict. Generation then dies several
+    layers down on `outputs.past_key_values`, with nothing in the message to suggest that the file
+    was fine and the move was not.
+    """
     if isinstance(obj, torch.Tensor):
         return obj.to(_device).to(_dtype) if obj.is_floating_point() else obj.to(_device)
     if isinstance(obj, dict):
-        return {key: _to_device(value) for key, value in obj.items()}
+        for key in list(obj.keys()):
+            obj[key] = _to_device(obj[key])
+        return obj
     if isinstance(obj, list):
-        return [_to_device(item) for item in obj]
+        obj[:] = [_to_device(item) for item in obj]
+        return obj
     if isinstance(obj, tuple):
         return tuple(_to_device(item) for item in obj)
     if hasattr(obj, "key_cache") and hasattr(obj, "value_cache"):

@@ -158,7 +158,13 @@ static int SynthContainer(string[] rest)
         StylePresets: SessionStories.Tts.Container.ContainerStylePresets.Default,
         LicenceNote: "",
         Accepted: true,
-        Clones: !flags.ContainsKey("no-clone"));
+        Clones: !flags.ContainsKey("no-clone"))
+    {
+        // Some images serve more than one model and pick between them by environment — VibeVoice
+        // runs its Polish voices that way. Without this the container would come up in the wrong
+        // mode and answer, wrongly, as if it were the other engine.
+        Environment = ParseEnv(flags.GetValueOrDefault("env")),
+    };
     var mounts = new SessionStories.Tts.Container.ContainerTtsMounts(
         VoicesRoot: flags.GetValueOrDefault("voices-root") ?? Path.Combine(repoRoot, "library", "voices"));
 
@@ -265,6 +271,20 @@ static int Parity(string[] rest)
     return 0;
 }
 
+/// <summary>"A=1,B=2" into the container's environment. Empty when the flag is absent.</summary>
+static Dictionary<string, string> ParseEnv(string? spec)
+{
+    var environment = new Dictionary<string, string>(StringComparer.Ordinal);
+    foreach (var pair in (spec ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        var split = pair.IndexOf('=');
+        if (split <= 0)
+            throw new UsageException($"--env wants NAME=VALUE pairs, got '{pair}'");
+        environment[pair[..split]] = pair[(split + 1)..];
+    }
+    return environment;
+}
+
 static Dictionary<string, string> ParseFlags(string[] rest, HashSet<string> boolFlags)
 {
     var flags = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -356,6 +376,7 @@ static int Usage(string? error)
                         --lang <code> --out <mp3> [--reference-wav <path>] [--speaker <name>]
                         [--no-clone] [--temperature <0.1..1.5>] [--speed <0.5..2>]
                         [--container <name>] [--models-root <dir>] [--voices-root <dir>]
+                        [--env NAME=VALUE,NAME=VALUE]
 
           tts-cli parity (--text <string> | --text-file <path>) --lang <code> --dump-tokens <path.json>
                         [--voice <wav>] [--cpu] [--wav-out <path>] [--exaggeration <v>]
