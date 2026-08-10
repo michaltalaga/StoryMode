@@ -448,9 +448,12 @@ export const pl: Strings = {
   voiceStyleCalm: 'Spokojnie',
   voiceStyleNatural: 'Naturalnie',
   voiceStyleLively: 'Żywo',
-  /** Reused by the story builder, where the choice actually lives. */
+  /** Reused by the render dialog, where the choice actually lives. */
   voicesStyleLabel: 'Sposób czytania',
-  builderDeliveryHint: 'Jak ma być czytana ta opowieść. Głos zostaje ten sam — raport bitewny i bajka na dobranoc potrzebują po prostu innego tempa.',
+  renderAudioHint: 'Kto czyta i jak. Żadne z tych ustawień nie zmienia treści — ten sam tekst możesz nagrać ponownie innym głosem.',
+  renderDeliveryHint: 'Raport bitewny i bajka na dobranoc potrzebują innego tempa.',
+  /** {name} is the chosen voice. */
+  renderAudioStart: 'Nagraj głosem {name}',
   voicesRerecord: 'Nagraj próbkę jeszcze raz',
   voicesSetDefault: 'Ustaw jako domyślny',
   voicesRename: 'Zmień nazwę',

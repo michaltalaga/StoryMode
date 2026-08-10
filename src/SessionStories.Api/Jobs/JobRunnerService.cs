@@ -193,14 +193,17 @@ public sealed class JobRunnerService(
             ?? throw new InvalidOperationException($"session.{job.Variant}.json not found or unreadable.");
 
         var catalog = voices.ReadCatalog();
-        var voiceId = session.Voice ?? catalog?.Default
+        // The render carries the choice; the story only remembers what was picked last time.
+        var voiceId = job.VoiceId ?? session.Voice ?? catalog?.Default
             ?? throw new InvalidOperationException(
-                $"No voice: session.{job.Variant}.json has no voice and library/voices.json has no default.");
+                $"No voice: this render named none, session.{job.Variant}.json has none, " +
+                "and library/voices.json has no default.");
         var voice = RequireVoice(catalog, voiceId, job.Variant);
+        var delivery = job.Delivery ?? session.Delivery;
 
-        // Knobs: this story's delivery resolved against the voice's engine, then the session's
+        // Knobs: the delivery resolved against the voice's engine, then the session's
         // voiceOverrides on top (files-on-disk wins).
-        var knobs = new Dictionary<string, double>(StyleKnobs(voice.EngineId, session.Delivery));
+        var knobs = new Dictionary<string, double>(StyleKnobs(voice.EngineId, delivery));
         foreach (var (name, value) in session.VoiceOverrides)
             knobs[name] = value;
 
@@ -217,7 +220,7 @@ public sealed class JobRunnerService(
         var progress = new DelegateProgress<TtsProgress>(
             p => job.AppendLog($"tts {p.ChunkIndex}/{p.ChunkCount}: {p.Message}"));
 
-        job.AppendLog($"voice '{voice.Name}' ({voice.Locale}), delivery {VoiceStyle.Normalize(session.Delivery)}");
+        job.AppendLog($"voice '{voice.Name}' ({voice.Locale}), delivery {VoiceStyle.Normalize(delivery)}");
         await SynthesizeWithEngineAsync(job, voice, request, progress, ct);
         job.AppendLog($"wrote audio/{job.Variant}.mp3");
     }

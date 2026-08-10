@@ -729,6 +729,12 @@ api.MapPost("/stories/{sid}/jobs", (string sid, CreateJobRequest request, IStory
     }
     if (request.Type != JobType.Transcribe && string.IsNullOrWhiteSpace(request.Variant))
         return Problem(400, $"{request.Type} jobs require 'variant'");
+    if (request.Delivery is { } delivery && !VoiceStyle.All.Contains(delivery, StringComparer.OrdinalIgnoreCase))
+        return Problem(400, $"Unknown delivery '{delivery}'. Known: {string.Join(", ", VoiceStyle.All)}");
+
+    // Remember what this render was asked for, so the next one can offer the same again.
+    if (request.Type == JobType.RenderTts && (request.VoiceId is not null || request.Delivery is not null))
+        stories.RememberRenderChoice(sid, request.Variant!, request.VoiceId, request.Delivery);
 
     var job = registry.Enqueue(new JobRecord
     {
@@ -740,6 +746,7 @@ api.MapPost("/stories/{sid}/jobs", (string sid, CreateJobRequest request, IStory
         FeedbackNote = request.FeedbackNote,
         File = request.File,
         VoiceId = request.VoiceId,
+        Delivery = request.Delivery,
     });
     return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id });
 });
@@ -1012,7 +1019,9 @@ static string? ProbeGpu()
 
 sealed record CreateStoryRequest(string Slug, string Universe, string Variant, string Title, string? Language);
 
-sealed record CreateJobRequest(JobType Type, string? Variant, string? SceneId, string? FeedbackNote, string? File, string? VoiceId);
+/// <summary>VoiceId and Delivery are renderTts choices, made when the render is asked for.</summary>
+sealed record CreateJobRequest(JobType Type, string? Variant, string? SceneId, string? FeedbackNote,
+    string? File, string? VoiceId, string? Delivery);
 
 sealed record ApproveFactsRequest(string[] AcceptedLineIds);
 

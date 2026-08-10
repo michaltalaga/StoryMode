@@ -349,6 +349,25 @@ public sealed class FileStoryStore(string storiesRoot) : IStoryStore
             GetString(root, "delivery"));
     }
 
+    public void RememberRenderChoice(string storyId, string variant, string? voiceId, string? delivery)
+    {
+        ValidateName(variant, nameof(variant));
+        var path = Path.Combine(RequireStoryDir(storyId), $"session.{variant}.json");
+        if (!File.Exists(path))
+            return;
+        if (JsonNode.Parse(File.ReadAllText(path), null, TolerantJson) is not JsonObject root)
+            return;
+
+        if (voiceId is not null)
+            root["voice"] = voiceId;
+        if (delivery is not null)
+            root["delivery"] = delivery;
+
+        // Round-trips through JsonNode, so unknown fields and hand-written entries survive; the
+        // file loses its comments, which is the same trade every structured write here makes.
+        AtomicWrite(path, root.ToJsonString(IndentedJson) + "\n");
+    }
+
     public IReadOnlyList<PendingFact> ReadPendingFacts(string storyId, string variant)
     {
         ValidateName(variant, nameof(variant));

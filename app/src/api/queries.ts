@@ -105,6 +105,9 @@ export interface EnqueueJobBody {
   feedbackNote?: string;
   /** Recollection file name — required by the backend for transcribe jobs. */
   file?: string;
+  /** renderTts: who reads it and how. The story remembers both for next time. */
+  voiceId?: string;
+  delivery?: string;
 }
 
 export function enqueueJob(storyId: string, body: EnqueueJobBody): Promise<{ jobId: string }> {
@@ -152,6 +155,25 @@ export function useDraft(storyId: string, variant: string) {
       return { scenes: JSON.parse(text) as SceneDto[], etag };
     },
     enabled: storyId.length > 0 && variant.length > 0,
+  });
+}
+
+/**
+ * What this variant was last rendered with. Voice and delivery are render choices, not part of
+ * the story — the session file just remembers them so the next render can offer the same again.
+ */
+export function useRenderChoice(storyId: string, variant: string) {
+  return useQuery({
+    queryKey: ['render-choice', storyId, variant],
+    queryFn: async (): Promise<{ voice: string; delivery: string }> => {
+      const { text } = await getWithETag(
+        `/api/stories/${encodeURIComponent(storyId)}/session/${encodeURIComponent(variant)}`,
+      );
+      const doc = JSON.parse(text) as { voice?: string; delivery?: string };
+      return { voice: doc.voice ?? '', delivery: doc.delivery ?? 'natural' };
+    },
+    enabled: storyId.length > 0 && variant.length > 0,
+    staleTime: 0,
   });
 }
 

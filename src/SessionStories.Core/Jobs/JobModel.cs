@@ -23,8 +23,14 @@ public sealed class JobRecord
     public string? FeedbackNote { get; init; }
     public string? File { get; init; }
 
-    /// <summary>PreviewVoice and InstallVoice jobs only — they belong to a voice, not to a story.</summary>
+    /// <summary>
+    /// PreviewVoice and InstallVoice jobs: the voice they are about. RenderTts: the voice to read
+    /// with, chosen when the render is asked for. Null falls back to the story's remembered choice.
+    /// </summary>
     public string? VoiceId { get; init; }
+
+    /// <summary>RenderTts only — how to read it. Null falls back to the story's remembered choice.</summary>
+    public string? Delivery { get; init; }
 
     /// <summary>InstallVoice jobs only — what to install and under which name.</summary>
     public VoiceInstallRequest? Install { get; init; }

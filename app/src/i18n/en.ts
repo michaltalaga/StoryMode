@@ -447,9 +447,12 @@ export const en = {
   voiceStyleCalm: 'Calm',
   voiceStyleNatural: 'Natural',
   voiceStyleLively: 'Lively',
-  /** Reused by the story builder, where the choice actually lives. */
+  /** Reused by the render dialog, where the choice actually lives. */
   voicesStyleLabel: 'Delivery',
-  builderDeliveryHint: 'How this story is read. The voice stays the same — a battle report and a bedtime story just want different pacing.',
+  renderAudioHint: 'Who reads it, and how. Neither changes a word of the story — you can render the same draft again in another voice.',
+  renderDeliveryHint: 'A battle report and a bedtime story want different pacing.',
+  /** {name} is the chosen voice. */
+  renderAudioStart: 'Record it in {name}’s voice',
   voicesRerecord: 'Record the sample again',
   voicesSetDefault: 'Make default',
   voicesRename: 'Rename',

@@ -53,6 +53,14 @@ public interface IStoryStore
     /// <summary>Typed view of the fields the pipeline needs from session.&lt;variant&gt;.json.</summary>
     SessionInfo? ReadSessionInfo(string storyId, string variant);
 
+    /// <summary>
+    /// Records the voice and delivery a render was asked for, so the next one can offer the same
+    /// again. Both are render-time choices, not part of what the story is — this is remembering
+    /// what you picked, not configuring the story. Nulls leave the existing value alone, and any
+    /// hand-written JSON on the file survives. No-op when the file is absent.
+    /// </summary>
+    void RememberRenderChoice(string storyId, string variant, string? voiceId, string? delivery);
+
     IReadOnlyList<PendingFact> ReadPendingFacts(string storyId, string variant);
 
     /// <summary>Rewrites the pending file without the decided fact ids; deletes it when empty.</summary>

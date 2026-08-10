@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import * as Dialog from '@radix-ui/react-dialog';
 import { ConflictError, getWithETag, putWithETag } from '../api/client';
-import { enqueueJob, useUniverseFile, useVoices } from '../api/queries';
+import { enqueueJob, useUniverseFile } from '../api/queries';
 import type { SessionJson } from '../api/types';
 import type { Strings } from '../i18n';
 import { useStrings } from '../i18n';
@@ -35,15 +35,6 @@ const aliases = (strings: Strings) => ({
   skipPlaceholder: strings.builderSkipPlaceholder,
   removeSkip: strings.builderSkipRemove,
   targetMinutes: strings.builderTargetMinutesLabel,
-  voice: strings.builderVoiceLabel,
-  voiceDefault: strings.builderVoiceDefault,
-  // Delivery belongs to the story, not the voice: the same narrator reads a battle report
-  // differently from a bedtime story.
-  delivery: strings.voicesStyleLabel,
-  deliveryHint: strings.builderDeliveryHint,
-  deliveryCalm: strings.voiceStyleCalm,
-  deliveryNatural: strings.voiceStyleNatural,
-  deliveryLively: strings.voiceStyleLively,
   language: strings.languageLabel,
   langPl: strings.languagePl,
   langEn: strings.languageEn,
@@ -329,20 +320,12 @@ export default function SessionBuilder() {
   const universeId = doc ? asStr(doc.universe) : '';
   const language = doc ? asStr(doc.language) : '';
   const charsQuery = useUniverseFile(universeId, 'characters.md');
-  const voicesQuery = useVoices();
 
   const characters = useMemo(() => {
     const text = fileText(charsQuery.data);
     return text === null ? [] : parseCharacters(text);
   }, [charsQuery.data]);
 
-  // Voices are global (library/voices.json). Show the ones that speak the session's
-  // language; when none do, show them all so the list is never empty.
-  const voices = useMemo(() => {
-    const all = voicesQuery.data ?? [];
-    const matching = all.filter((v) => v.locale.toLowerCase().startsWith(language.toLowerCase()));
-    return matching.length > 0 ? matching : all;
-  }, [voicesQuery.data, language]);
 
   /** Merge a patch of known keys into the parsed object; all unknown fields survive untouched. */
   const mutate = (fn: (d: SessionJson) => Json) => {
@@ -478,9 +461,6 @@ export default function SessionBuilder() {
   const pov = asStr(doc.pov);
   const povOptions = pov !== '' && !castRefs.includes(pov) ? [...castRefs, pov] : castRefs;
   const skipList = Array.isArray(doc.skip) ? doc.skip : [];
-  const voiceId = asStr(doc.voice);
-  // Absent in older session files, and that is fine — the render resolves it to the default.
-  const delivery = asStr(doc.delivery) || 'natural';
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 pt-4">
@@ -695,43 +675,8 @@ export default function SessionBuilder() {
               className={inputCls}
             />
           </Section>
-          <Section title={t.voice}>
-            <select value={voiceId} onChange={(e) => mutate(() => ({ voice: e.target.value }))} className={inputCls}>
-              <option value="">{t.voiceDefault}</option>
-              {voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {/* The list is already filtered to this language; the locale only shows
-                      in the fallback case, where every voice is a different language. */}
-                  {v.locale.toLowerCase().startsWith(language.toLowerCase())
-                    ? v.name
-                    : `${v.name} (${v.locale})`}
-                </option>
-              ))}
-              {voiceId !== '' && !voices.some((v) => v.id === voiceId) && <option value={voiceId}>{voiceId}</option>}
-            </select>
-          </Section>
-          <Section title={t.delivery}>
-            {/* Which deliveries exist is the chosen voice's engine's business; the reader picks
-                a word. Falls back to the three every engine declares when no voice is chosen. */}
-            <div role="group" className="inline-flex w-full overflow-hidden rounded-lg border border-stone-300">
-              {(voices.find((v) => v.id === voiceId)?.styles ?? ['calm', 'natural', 'lively']).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={delivery === option}
-                  onClick={() => mutate(() => ({ delivery: option }))}
-                  className={`min-h-11 flex-1 px-2 text-sm font-medium transition-colors ${
-                    delivery === option
-                      ? 'bg-stone-900 text-white'
-                      : 'bg-white text-stone-600 hover:bg-stone-100'
-                  }`}
-                >
-                  {option === 'calm' ? t.deliveryCalm : option === 'lively' ? t.deliveryLively : t.deliveryNatural}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1 text-xs text-stone-500">{t.deliveryHint}</p>
-          </Section>
+          {/* Voice and delivery are not here on purpose: they change nothing about what the
+              story is, only about one recording of it, so they are asked for at Render audio. */}
           <Section title={t.language}>
             <select value={language} onChange={(e) => mutate(() => ({ language: e.target.value }))} className={inputCls}>
               <option value="pl">{t.langPl}</option>

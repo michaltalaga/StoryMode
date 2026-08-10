@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, ConflictError, del, getWithETag, putWithETag } from '../api/client';
 import { enqueueJob, useDraft, useEnqueueJob, useJobs } from '../api/queries';
 import type { JobDto, SceneDto, VerifyFlag } from '../api/types';
+import RenderAudioDialog from '../components/RenderAudioDialog';
 import type { Strings } from '../i18n';
 import { useStrings } from '../i18n';
 
@@ -362,6 +363,7 @@ export default function DraftReview() {
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ sceneId: string; etag: string } | null>(null);
   const [regenFor, setRegenFor] = useState<string | null>(null);
+  const [renderOpen, setRenderOpen] = useState(false);
   const [feedbackNote, setFeedbackNote] = useState('');
   // Zaznaczenia uwag weryfikacji w dialogu regeneracji — tablica równoległa do flags sceny.
   const [checkedFlags, setCheckedFlags] = useState<boolean[]>([]);
@@ -503,7 +505,8 @@ export default function DraftReview() {
   const regenCanSubmit = checkedFlags.some(Boolean) || feedbackNote.trim().length > 0;
 
   const renderTtsMutation = useMutation({
-    mutationFn: () => enqueueJob(id, { type: 'renderTts', variant }),
+    mutationFn: (choice: { voiceId: string; delivery: string }) =>
+      enqueueJob(id, { type: 'renderTts', variant, ...choice }),
     onSuccess: () => {
       void queryClient.invalidateQueries();
       void navigate(`/stories/${id}/v/${variant}/progress`);
@@ -561,7 +564,7 @@ export default function DraftReview() {
         {scenes.length > 0 && (
           <button
             type="button"
-            onClick={() => renderTtsMutation.mutate()}
+            onClick={() => setRenderOpen(true)}
             disabled={variantBusy || renderTtsMutation.isPending}
             className="min-h-11 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
           >
@@ -616,6 +619,18 @@ export default function DraftReview() {
       {renderTtsMutation.isError && (
         <p className="mb-4 text-sm text-rose-600">{strings.renderTtsEnqueueError}</p>
       )}
+
+      <RenderAudioDialog
+        open={renderOpen}
+        storyId={id}
+        variant={variant}
+        busy={renderTtsMutation.isPending}
+        onClose={() => setRenderOpen(false)}
+        onRender={(choice) => {
+          setRenderOpen(false);
+          renderTtsMutation.mutate(choice);
+        }}
+      />
 
       {verifyMutation.isError && (
         <p className="mb-4 text-sm text-rose-600">{strings.enqueueError}</p>
